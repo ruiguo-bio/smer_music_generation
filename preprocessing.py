@@ -37,7 +37,7 @@ TRACK_0_RANGE = (21, 108)
 # TRACK_2_RANGE = (28, 52)
 
 TIME_SIGNATURE_MAX_CHANGE = 1
-TEMPO_MAX_CHANGE = 1
+# TEMPO_MAX_CHANGE = 1
 
 
 MAX_TRACK = 3
@@ -90,15 +90,16 @@ def remove_drum_track(pm,track_names=None):
 
 
 def remove_empty_track(pm):
+    pm_new = copy.deepcopy(pm)
     occupation_rate = []
 
-    beats = pm.get_beats()
+    beats = pm_new.get_beats()
     if len(beats) < 20:
         return None
 
     fs = 4 / (beats[1] - beats[0])
 
-    for instrument in pm.instruments:
+    for instrument in pm_new.instruments:
         piano_roll = instrument.get_piano_roll(fs=fs)
         if piano_roll.shape[1] == 0:
             occupation_rate.append(0)
@@ -108,8 +109,8 @@ def remove_empty_track(pm):
 
     for index,rate in enumerate(occupation_rate[::-1]):
         if rate < 0.3:
-            pm.instruments.pop(len(occupation_rate) - 1 - index)
-    return pm
+            pm_new.instruments.pop(len(occupation_rate) - 1 - index)
+    return pm_new
 
 
 
@@ -549,13 +550,13 @@ def midi_2event(file_name,track_info=None):
         return None
 
     tempo_change_times, tempi = pm.get_tempo_changes()
-    if tempo_change_times[0] != 0:
-        print(f'tempo change time not at start, omit {file_name}')
-        return None
+    # if tempo_change_times[0] != 0:
+    #     print(f'tempo change time not at start, omit {file_name}')
+    #     return None
 
-    if len(tempo_change_times) > TEMPO_MAX_CHANGE:
-        print(f'more than {TEMPO_MAX_CHANGE} tempo changes, omit {file_name}')
-        return None
+    # if len(tempo_change_times) > TEMPO_MAX_CHANGE:
+    #     print(f'more than {TEMPO_MAX_CHANGE} tempo changes, omit {file_name}')
+    #     return None
 
 
     signature_change_time = np.array([signature.time for signature in pm.time_signature_changes])
@@ -690,10 +691,12 @@ def midi_2event(file_name,track_info=None):
             note_in_this_bar = [note for note in pm.instruments[track].notes if
                                 note.start >= bar_time - minimum_difference and note.start < next_bar_time-minimum_difference]
 
-            for note in note_in_this_bar:
+            remove_note_list = []
+            for note_idx, note in enumerate(note_in_this_bar):
                 if note.pitch > TRACK_0_RANGE[1] or note.pitch < TRACK_0_RANGE[0]:
-                    print(f"note pitch {note.pitch} out of range, skip this file")
-                    return None
+                    remove_note_list.append(note_idx)
+            for note_idx in remove_note_list[::-1]:
+                del note_in_this_bar[note_idx]
 
             # continue_flag.extend([0] * len(note_in_this_bar))
             beat_in_this_bar = beats[down_beat_to_beat_indices[bar]:down_beat_to_beat_indices[bar+1]+1]
@@ -747,6 +750,214 @@ def remove_control_event(file_events, control_token):
         if token in control_token:
             new_file_events.remove(token)
     return new_file_events
+
+
+def bar_event_2_midi(event_list,headers):
+    try:
+        tempo_category = int(headers[1][2])
+        if tempo_category == len(tempo_bins) - 1:
+            tempo = tempo_bins[tempo_category]
+        else:
+            tempo = (tempo_bins[tempo_category] + tempo_bins[tempo_category + 1]) / 2
+        pm_new = pretty_midi.PrettyMIDI(initial_tempo=tempo)
+
+        numerator = int(headers[0].split('/')[0])
+        denominator = int(headers[0].split('/')[1])
+
+        time_signature = pretty_midi.TimeSignature(numerator, denominator, 0)
+        pm_new.time_signature_changes = [time_signature]
+
+        r = re.compile('i_\d')
+
+        programs = list(filter(r.match, headers))
+
+        r = re.compile('track_\d')
+
+        track_match = list(set(filter(r.match, event_list)))
+        track_match.sort()
+
+        track_idx_dict = {}
+        for track_idx, track_name in enumerate(track_match):
+            track_idx_dict[track_name[-1]] = track_idx
+
+        # program_start_pos = np.where(track_0_program == np.array(event_list))[0][0]
+        #
+        bar_start_pos = np.where('bar' == np.array(event_list))[0][0]
+        # programs = event_list[program_start_pos:start_track_pos]
+
+        for idx, track in enumerate(programs):
+            track = pretty_midi.Instrument(program=int(track.split('_')[-1]))
+            # if track_match[idx] == 'track_3':
+            #     track.is_drum = True
+            pm_new.instruments.append(track)
+
+        # add a fake note for duration dict calculation
+        pm_new.instruments[0].notes.append(pretty_midi.Note(
+            velocity=100, pitch=30, start=0, end=10))
+        beats = pm_new.get_beats()
+        pm_new.instruments[0].notes.pop()
+        duration_name_to_time, duration_time_to_name, duration_times, bar_duration = get_note_duration_dict(
+            beats[1] - beats[0], (time_signature.numerator, time_signature.denominator))
+
+        curr_time = 0
+        previous_bar_start_time = 0
+        previous_duration = 0
+
+        in_duration_event = False
+        is_sep = False
+        is_continue = False
+
+        pitch_list = []
+        duration_list = []
+
+        bar_num = 0
+        track = 0
+
+        bar_poses = np.where(np.array(event_list) == 'bar')[0]
+
+
+
+        def total_duration(duration_list):
+            total = 0
+            if duration_list:
+
+                for duration in duration_list:
+                    total += duration_name_to_time[duration]
+            return total
+
+        def clear_pitch_duration_event(pm_new,
+                                       track_idx,
+                                       curr_time,
+                                       previous_duration,
+                                       is_sep,
+                                       is_continue,
+                                       pitch_list,
+                                       duration_list):
+            if is_sep:
+                duration = total_duration(duration_list)
+                curr_time -= previous_duration
+
+            else:
+                duration = total_duration(duration_list)
+
+            for pitch in pitch_list:
+                if is_continue:
+                    # look for the previous note, and change the end time of it
+                    for note in pm_new.instruments[track_idx].notes[::-1]:
+                        if math.isclose(note.end, curr_time) and note.pitch == pitch:
+                            note.end += duration
+                            break
+
+                else:
+                    if track == 0:
+                        velocity = V0
+                    elif track == 1:
+                        velocity = V1
+                    else:
+                        velocity = V2
+                    note = pretty_midi.Note(velocity=velocity, pitch=pitch, start=curr_time,
+                                            end=curr_time + duration)
+                    pm_new.instruments[track_idx].notes.append(note)
+
+            curr_time += duration
+            previous_duration = duration
+
+            return curr_time, previous_duration
+
+        current_bar_event = []
+        for i, event in enumerate(event_list[bar_start_pos:]):
+
+            current_bar_event.append(event)
+            if event in control_tokens:
+                continue
+
+            if event in duration_name_to_time.keys():
+                duration_list.append(event)
+                in_duration_event = True
+
+
+                continue
+
+            if in_duration_event:
+
+
+                curr_time, previous_duration = clear_pitch_duration_event(pm_new,
+                                                                          track_idx,
+                                                                          curr_time,
+                                                                          previous_duration,
+                                                                          is_sep,
+                                                                          is_continue,
+                                                                          pitch_list,
+                                                                          duration_list)
+
+                pitch_list = []
+                duration_list = []
+
+                in_duration_event = False
+                is_sep = False
+                is_continue = False
+
+            pitch_match = re.search(r'p_(\d+)', event)
+            if pitch_match:
+
+
+                pitch = int(pitch_match.group(1))
+                pitch_list.append(pitch)
+
+            if event == 'sep':
+                is_sep = True
+
+            if event == 'continue' and i > bar_poses[1]:
+                is_continue = True
+
+            if event == 'bar':
+                bar_start_time = bar_num * bar_duration
+                bar_num += 1
+                # if bar_num == 65:
+                #     print(bar_num)
+
+                current_bar_event = []
+                continue
+
+            track_match = re.search(r'track_(\d)', event)
+
+            if track_match:
+                curr_time = bar_start_time
+                previous_duration = 0
+                track = track_match.group(1)
+                track_idx = track_idx_dict[track]
+                track = int(track)
+
+
+
+        else:
+
+            if in_duration_event:
+
+
+                curr_time, previous_duration = clear_pitch_duration_event(pm_new,
+                                                                          track_idx,
+                                                                          curr_time,
+                                                                          previous_duration,
+                                                                          is_sep,
+                                                                          is_continue,
+                                                                          pitch_list,
+                                                                          duration_list)
+                pitch_list = []
+                duration_list = []
+
+                in_duration_event = False
+                is_sep = False
+                is_continue = False
+
+
+        return pm_new
+
+    except Exception as e:
+        print(e)
+        return None
+
+
 
 def event_2midi(event_list):
     try:
@@ -1118,7 +1329,7 @@ if __name__== "__main__":
     with open('/home/data/guorui/dataset/lmd/full_output/program_result.json') as json_file:
         track_info = json.load(json_file)
 
-    for file_idx,file_name in enumerate(all_names):
+    for file_idx,file_name in enumerate(all_names[97560:]):
         logger.info(f'working on {file_idx}th file {file_name}')
         result = midi_2event(file_name,track_info)
         if result is None:
@@ -1137,7 +1348,10 @@ if __name__== "__main__":
             os.makedirs(new_output_folder)
 
 
-        pm_new,sta_dict_list = event_2midi(event_list)
+        result = event_2midi(event_list)
+        if result is None:
+            continue
+        pm_new, sta_dict_list = result
         base_name = os.path.basename(file_name).split('.')
         output_name = os.path.join(new_output_folder, base_name[0])
 

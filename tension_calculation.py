@@ -6,9 +6,7 @@ import pretty_midi
 import sys
 import copy
 import numpy as np
-# import matplotlib
-# matplotlib.use('Agg')
-import matplotlib.pyplot as plt
+
 import itertools
 
 import json
@@ -174,6 +172,7 @@ def ce_sum(indices, start=None, end=None):
         for pitch in data:
             total += pitch_index_to_position(pitch)
             count += 1
+
     return total/count
 
 
@@ -471,42 +470,37 @@ def cal_tension(piano_roll,beat_time,beat_indices,down_beat_time,down_beat_indic
 
         centroids = cal_centroid(piano_roll, note_shift,key_change_beat,changed_note_shift)
 
-        merged_centroids = merge_tension(centroids,beat_indices, down_beat_indices, window_size=window_size)
-        merged_centroids = np.array(merged_centroids)
+        silent = np.where(np.linalg.norm(centroids, axis=-1) == 0)
 
         if window_size == -1:
             window_time = down_beat_time
         else:
             window_time = beat_time[::window_size]
-        silent = np.where(np.linalg.norm(merged_centroids, axis=-1) == 0)
 
-        if key_change_beat != -1:
-            key_diff = np.zeros(merged_centroids.shape[0])
-            changed_step = int(key_change_beat / abs(window_size))
-            for step in range(merged_centroids.shape[0]):
-                if step < changed_step:
-                    key_diff[step] = np.linalg.norm(merged_centroids[step] - key_pos)
-                else:
-                    key_diff[step] = np.linalg.norm(merged_centroids[step] - changed_key_pos)
-        else:
-            key_diff = np.linalg.norm(merged_centroids - key_pos,axis=-1)
 
+        key_diff = np.linalg.norm(centroids - key_pos, axis=-1)
 
         key_diff[silent] = 0
+
+        merged_centroids = merge_tension(key_diff,beat_indices, down_beat_indices, window_size=window_size)
+        merged_centroids = np.array(merged_centroids)
 
         diameters = cal_diameter(piano_roll, note_shift,key_change_beat,changed_note_shift)
         diameters = merge_tension(diameters, beat_indices, down_beat_indices, window_size)
         #
-
-        centroid_diff = np.diff(merged_centroids, axis=0)
         #
-        np.nan_to_num(centroid_diff, copy=False)
+        # centroid_diff = np.diff(merged_centroids, axis=0)
+        # #
+        # np.nan_to_num(centroid_diff, copy=False)
+        #
+        # if len(centroid_diff) == 0:
+        #     centroid_diff = 0
+        # else:
+        #     centroid_diff = np.linalg.norm(centroid_diff, axis=-1)
+        #     centroid_diff = np.insert(centroid_diff, 0, 0)
 
-        centroid_diff = np.linalg.norm(centroid_diff, axis=-1)
-        centroid_diff = np.insert(centroid_diff, 0, 0)
 
-
-        total_tension = key_diff
+        total_tension = merged_centroids
 
 
         return [total_tension, diameters, key_name,changed_key_name,
@@ -647,16 +641,20 @@ def detect_key_change(key_diff,diameter,start_ratio=0.5):
 
 
 def remove_drum_track(pm):
-
-    for instrument in pm.instruments:
-        if instrument.is_drum:
-            pm.instruments.remove(instrument)
+    instrument_idx = []
+    for idx in range(len(pm.instruments)):
+        if pm.instruments[idx].is_drum:
+            instrument_idx.append(idx)
+    for idx in instrument_idx[::-1]:
+        del pm.instruments[idx]
     return pm
-
 
 
 def get_beat_time(pm, beat_division=4):
     beats = pm.get_beats()
+
+    if pm.time_signature_changes[0].denominator == 8:
+        beat_division = int(beat_division * 3 / 2)
 
     divided_beats = []
     for i in range(len(beats) - 1):
@@ -671,7 +669,14 @@ def get_beat_time(pm, beat_division=4):
 
     down_beats = pm.get_downbeats()
     if divided_beats[-1] > down_beats[-1]:
-        down_beats = np.append(down_beats, down_beats[-1] - down_beats[-2] + down_beats[-1])
+        if len(down_beats) == 1:
+            if pm.time_signature_changes[0].denominator == 4 and pm.time_signature_changes[0].numerator == 4:
+                bar_duration = (beats[1] - beats[0]) * 4
+            else:
+                bar_duration = (beats[1] - beats[0]) * 2
+            down_beats = np.append(down_beats, bar_duration + down_beats[-1])
+        else:
+            down_beats = np.append(down_beats, down_beats[-1] - down_beats[-2] + down_beats[-1])
 
     down_beats = np.unique(down_beats, axis=0)
 

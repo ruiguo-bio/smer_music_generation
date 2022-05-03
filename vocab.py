@@ -89,7 +89,7 @@ track_polyphony_rate_token = [f'y_{num}' for num in range(10)]
 
 
 tensile_strain_token = [f's_{num}' for num in range(12)]
-diameter_token = [f'a_{num}' for num in range(12)]
+
 
 
 
@@ -106,10 +106,10 @@ track_control_tokens = track_note_density_token + \
                        track_occupation_rate_token + \
                        track_polyphony_rate_token
 
-bar_control_tokens = tensile_strain_token + diameter_token
-
+bar_control_tokens = tensile_strain_token
+no_control_tokens = ['unk']
 song_control_tokens = key_token
-control_tokens = bar_control_tokens + track_control_tokens + song_control_tokens
+control_tokens = bar_control_tokens + track_control_tokens
 
 class WordVocab(object):
     def __init__(self, mode,control_list):
@@ -135,8 +135,7 @@ class WordVocab(object):
                      track_note_density_token + \
                      track_polyphony_rate_token + \
                      track_occupation_rate_token + \
-                     key_token + tensile_strain_token + \
-                     diameter_token
+                     key_token + tensile_strain_token + no_control_tokens
 
 
 
@@ -144,6 +143,7 @@ class WordVocab(object):
         self.eos_index = 1
         self.char_lst = all_tokens
         self.basic_tokens = basic_tokens
+        self.corrupt_tokens = no_control_tokens
 
         self._char2idx = {
             '<pad>': self.pad_index,
@@ -167,8 +167,11 @@ class WordVocab(object):
         self.tempo_indices = [self._char2idx[name] for name in tempo_token]
         self.time_signature_indices = [self._char2idx[name] for name in time_signature_token]
         self.rest_indices = []
+        self.sep_indices = []
         self.control_indices = {}
         self.control_tokens = []
+
+        # self.control_tokens.extend(no_control_tokens)
 
 
 
@@ -233,6 +236,8 @@ class WordVocab(object):
                 self.name_to_tokens['duration'] = [self._idx2char[index]]
 
         self.token_class_ranges[self.eos_index] = 'eos'
+
+        self.token_class_ranges[self.vocab_size-1] = 'unk'
 
         self.name_to_tokens['eos'] = self._idx2char[self.eos_index]
 
@@ -301,18 +306,6 @@ class WordVocab(object):
                     self.name_to_tokens['tensile'] = [self._idx2char[index]]
 
             self.control_tokens.extend(self.name_to_tokens['tensile'])
-
-        if 'diameter' in control_list:
-            self.diameter_indices = [self._char2idx[name] for name in diameter_token]
-            self.control_indices['diameter'] = self.diameter_indices
-
-            for index in self.diameter_indices:
-                self.token_class_ranges[index] = 'diameter'
-                if 'diameter' in self.name_to_tokens:
-                    self.name_to_tokens['diameter'].append(self._idx2char[index])
-                else:
-                    self.name_to_tokens['diameter'] = [self._idx2char[index]]
-            self.control_tokens.extend(self.name_to_tokens['diameter'])
 
         self.class_names = set(self.token_class_ranges.values())
 

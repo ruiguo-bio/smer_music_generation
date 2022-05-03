@@ -719,50 +719,87 @@ def walk(folder_name,suffix):
 #
 # midi_folder = "/home/ruiguo/dataset/chinese"
 # event_folder = "/home/data/guorui/dataset/lmd/only_melody_bass_event"
-event_folder = "/home/data/guorui/dataset/lmd/smer/"
-# original_folder = "/home/ruiguo/dataset/POP909-Dataset/POP909"
-# # # # #
-# file_names = walk(event_folder,'event')
-# print(f'original total files is {len(file_names)}')
-# total_files = 0
-# for file_idx,file_name in enumerate(file_names[97485:]):
-#
-#     print(file_idx,file_name)
-#
-#     rest_multi = pickle.load(open(file_name, 'rb'))
-#     # rest_multi_original = midi_2event('temp.mid')[0]
-#
-#     # rest_multi_original = midi_2event('/home/ruiguo/dataset/POP909-Dataset/POP909/629/629.mid')[0]
-#
-#     # rest_multi_midi = event_2midi(rest_multi_original)[0]
-#     # rest_multi_midi.write(file_name[:-6] + '.mid')
-#
-#     # result = midi_2event(file_name,logger)
-#
-#     # if result:
-#     #     rest_multi,pm0 = result
-#     # else:
-#     #     continue
-#     # base_name = os.path.basename(file_name)[:-4]
-#     # pickle.dump(rest_multi,open('/home/ruiguo/dataset/chinese_event' + base_name + '_event','wb'))
-#     # rest, multi duration (sheet)
-#     # rest_multi = pickle.load(open(file_name,'rb'))
-# #     # new_event = remove_first_continue(events)
+# event_folder = "/home/data/guorui/dataset/lmd/remi_track"
+# # event_folder_1 = "/home/data/guorui/dataset/lmd/smer_track"
+# # # original_folder = "/home/ruiguo/dataset/POP909-Dataset/POP909"
+# # # # # # #
+# file_names = walk(event_folder,'control')
+# # file_names1 = walk(event_folder_1,'control')
 # #
-# #     # step, single duration, (remi)
-# #     np.where(np.array(rest_multi) == 'bar')
-# #     rest_multi[203:]
-#     step_single = rest_multi_step_single(rest_multi)
-#     pickle.dump(step_single, open(os.path.join(event_folder, file_name[:-5] + 'step_single'), 'wb'))
+# # print(f'original total files is {len(file_names)}')
+# # total_files = 0
+# total_ratios = []
+# # not_equal_names = []
+# for file_idx,file_name in enumerate(file_names):
+#     # file_name = '/home/data/guorui/dataset/lmd/smer_track/0000799e8672292fe6f0fff08554ca40_event_control'
+#     # print(file_idx,file_name)
+#     smer_dir = os.path.abspath(os.path.join(os.path.dirname(file_name), '../')) + '/smer_track'
+#     smer_name = os.path.basename(file_name).split('_')[0] + '_event_control'
+#     smer_file = os.path.join(smer_dir,smer_name)
 #
-#     remi_midi = remi_2midi(step_single)
-#     # np.where(np.array(remi_midi) == 'bar')
-#     # step_single[139:]
-#     remi_midi.write(os.path.join(event_folder,file_name[:-5] + 'step_single.mid'))
-#     total_files += 1
+#     # remi_dir = os.path.abspath(os.path.join(os.path.dirname(file_name), '../')) + '/remi_track'
+#     # remi_name = os.path.basename(file_name).split('_')[0] + '_step_single_control'
+#     # remi_file = os.path.join(remi_dir, remi_name)
+#     if not os.path.exists(smer_file):
+#         os.remove(file_name)
+#         continue
+# #
+# #
+#     rest_multi = pickle.load(open(smer_file, 'rb'))
+#     remi = pickle.load(open(file_name, 'rb'))
+#     if len(remi) != len(rest_multi):
+#         print('what')
+#     #     common_length = min(len(remi),len(rest_multi))
+#     #
+#     #     remi = remi[:common_length]
+#     #     rest_multi = rest_multi[:common_length]
+#     #
+#     #     pickle.dump(rest_multi, open(smer_file, 'wb'))
+#     #     pickle.dump(remi, open(file_name, 'wb'))
+#
+#     for idx in range(len(remi)):
+#
+#         total_ratios.append(len(rest_multi[idx]) / len(remi[idx]))
+#
+# #
+# print(np.mean(np.array(total_ratios)))
+
+
+
+
+    # rest_multi_original = midi_2event('temp.mid')[0]
+
+    # rest_multi_original = midi_2event('/home/ruiguo/dataset/POP909-Dataset/POP909/629/629.mid')[0]
+
+    # rest_multi_midi = event_2midi(rest_multi[idx])[0]
+    # rest_multi_midi.write(file_name[:-6] + '.mid')
+
+    # result = midi_2event(file_name,logger)
+
+    # if result:
+    #     rest_multi,pm0 = result
+    # else:
+    #     continue
+    # base_name = os.path.basename(file_name)[:-4]
+    # pickle.dump(rest_multi,open('/home/ruiguo/dataset/chinese_event' + base_name + '_event','wb'))
+    # rest, multi duration (sheet)
+    # rest_multi = pickle.load(open(file_name,'rb'))
+#     # new_event = remove_first_continue(events)
+#
+#     # step, single duration, (remi)
+#     np.where(np.array(rest_multi) == 'bar')
+#     rest_multi[203:]
+#     step_single = rest_multi_step_single(rest_multi[0])
+    # pickle.dump(step_single, open(os.path.join(event_folder, file_name[:-5] + 'step_single'), 'wb'))
+
+    # remi_midi = remi_2midi(remi[idx])
+    # # # np.where(np.array(remi_midi) == 'bar')
+    # # # step_single[139:]
+    # remi_midi.write(os.path.join(event_folder,file_name[:-5] + 'step_single1.mid'))
+    # # total_files += 1
     # r = re.compile('track_\d')
-    #
-    # track_program = list(set(filter(r.match, rest_multi)))
+    # #
+    # track_program = list(set(filter(r.match, rest_multi[0])))
     # track_program.sort()
     # track_info = {}
     # track_info[os.path.join(event_folder,file_name[:-5] + 'step_single.mid')] = {}
@@ -775,7 +812,7 @@ event_folder = "/home/data/guorui/dataset/lmd/smer/"
     #         track_info[os.path.join(event_folder,file_name[:-5] + 'step_single.mid')]['chord'] = ''
     # rest_multi_converted = midi_2event(os.path.join(event_folder,file_name[:-5] + 'step_single.mid'),track_info)[0]
     # bar_num = 0
-    # idx = 3
+    # idx = 0
     # while idx < len(rest_multi_converted):
     #     event = rest_multi_converted[idx]
     #     if event == 'bar':
@@ -802,8 +839,8 @@ event_folder = "/home/data/guorui/dataset/lmd/smer/"
     # #
     # # rest, single duration
     # sepingle = step_single_sepingle(step_single)
-    #
-    # # step, single duration
+
+    # step, single duration
     # step_single_back = sepingle_step_single(sepingle)
     #
     # step_multi = rest_multi_step_multi(rest_multi)
@@ -811,25 +848,25 @@ event_folder = "/home/data/guorui/dataset/lmd/smer/"
     #
     # assert rest_multi_back == rest_multi
     # assert step_single_back == step_single
-
+    #
     # step, multi duration
 
-#
-#     # rest_multi = step_multi_rest_multi(step_multi)
-#     # print(events)
-#     # print(step_multi)
-#     # print(rest_multi)
-#     # print('')
-#     # event_folder = os.path.dirname(file_name)
-#     pickle.dump(rest_multi, open(os.path.join(event_folder, os.path.basename(file_name)[:-4] + '_rest_multi'), 'wb'))
-    # #     #
+
+    # rest_multi = step_multi_rest_multi(step_multi)
+    # print(events)
+    # print(step_multi)
+    # print(rest_multi)
+    # print('')
+    # event_folder = os.path.dirname(file_name)
+    # pickle.dump(rest_multi, open(os.path.join(event_folder, os.path.basename(file_name)[:-4] + '_rest_multi'), 'wb'))
+    #     #
 
 # print(total_files)
     # pickle.dump(sepingle, open(os.path.join(event_folder, file_name[:-5] + 'sepingle'), 'wb'))
     # pickle.dump(step_multi, open(os.path.join(event_folder, file_name[:-5] + 'step_multi'), 'wb'))
 
-    #
-#
+
+
 #
 
 #
