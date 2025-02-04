@@ -31,8 +31,7 @@ tensile_bins = np.arange(0, 2.1, 0.2).tolist() + [4]
 diameter_bins = np.arange(0, 4.1, 0.4).tolist() + [5]
 
 tempo_bins = np.array([0] + list(range(60, 190, 30)) + [200])
-tension_bin = np.arange(0,6.5,0.5)
-tension_bin[-1] = 6.5
+
 
 
 all_key_names = ['C major', 'G major', 'D major', 'A major',
@@ -273,7 +272,6 @@ def remove_continue(file_events,is_continue,header_events):
 
 def remove_continue_add_control_event(file_events,header_events,key,tensiles,diameters,add_control=False,rest_multi=True,remove_continue=False,add_bar=False):
 
-    num_of_tracks = len(header_events[2:])
 
     bar_pos = np.where(file_events == 'bar')[0]
     new_file_events = []
@@ -1609,7 +1607,6 @@ def validate_event_data(batches):
 # #
 # vocab = WordVocab(all_tokens)
 # event_folder = '/Users/ruiguo/Downloads/score_transformer/jay_event'
-
 # event_folder = '/home/ruiguo/dataset/lmd/lmd_event_corrected_0723/'
 # event_folder = '/home/data/guorui/dataset/lmd/only_melody_bass_event'
 # event_folder = '/home/ruiguo/dataset/pop909'
@@ -1669,7 +1666,7 @@ def validate_event_data(batches):
 #     else:
 #         if rest_multi:
 #             logfile = 'rest_multi_test.log'
-#         else:
+#         eulse:
 #             logfile = 'step_single_test.log'
 # else:
 #     if add_control:

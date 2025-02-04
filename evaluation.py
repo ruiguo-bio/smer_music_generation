@@ -1444,6 +1444,9 @@ def get_args(default='.'):
     parser.add_argument('-w', '--control_mode', default=0, type=int,
                         help="control mode")
 
+    parser.add_argument('-m', '--unk_mode', default=0, type=int,
+                        help="unk mode")
+
     parser.add_argument('-u', '--use_correct_control', default=False, type=bool,
                         help="correct control")
 
@@ -1456,6 +1459,7 @@ platform = args.platform
 cuda_number = args.cuda
 control_number = args.control_number
 check_total_time = args.check_total_time
+unk_mode = args.unk_mode
 
 control_mode = args.control_mode
 use_correct_control = args.use_correct_control
@@ -1486,12 +1490,37 @@ else:
     bar_track_control = True
     bar_track_control_at_end = True
 
+
+
+
+
+if unk_mode == 0:
+    one_unk = False
+    bar_unk = False
+    all_unk = False
+elif unk_mode == 1:
+    one_unk = True
+    bar_unk = False
+    all_unk = False
+elif unk_mode == 2:
+    one_unk = False
+    bar_unk = True
+    all_unk = False
+elif unk_mode == 3:
+    all_unk = True
+    bar_unk = True
+    one_unk = False
+else:
+    one_unk = False
+    bar_unk = False
+    all_unk = False
+
+
+
+
 logger = logging.getLogger(__name__)
 
 
-
-use_unk = True
-all_unk = True
 
 if platform == 'local':
 
@@ -1500,11 +1529,11 @@ if platform == 'local':
     checkpoint_prefix = '/home/data/guorui/smer_transformer/checkpoints'
     if vocab_mode == 0:
         if bar_track_control:
-            batch_name = '/home/data/guorui/dataset/lmd/batches/bar_dataset/smer_bar_mock_evaluation_batch'
+            batch_name = '/home/data/guorui/dataset/lmd/batches/bar_dataset/smer_bar_evaluation_batch'
         else:
-            batch_name = '/home/data/guorui/dataset/lmd/batches/track_dataset/smer_mock_test_evaluation_batch'
+            batch_name = '/home/data/guorui/dataset/lmd/batches/track_dataset/smer_test_evaluation_batch'
     else:
-        batch_name = '/home/data/guorui/dataset/lmd/batches/track_dataset/remi_mock_test_evaluation_batch'
+        batch_name = '/home/data/guorui/dataset/lmd/batches/track_dataset/remi_test_evaluation_batch'
 else:
     checkpoint_prefix = './checkpoints'
     if vocab_mode == 0:
@@ -1514,15 +1543,17 @@ else:
             batch_name = '../dataset/batches/track_dataset/smer_test_evaluation_batch'
     else:
         batch_name = '../dataset/batches/track_dataset/remi_test_evaluation_batch'
-    if use_unk and all_unk:
+if all_unk:
 
-        output_folder_prefix = './evaluation/all_unk'
-    elif use_unk:
+    output_folder_prefix = './evaluation/all_unk'
+elif bar_unk:
 
-        output_folder_prefix = './evaluation/partial_unk'
-    else:
+    output_folder_prefix = './evaluation/bar_unk'
+elif one_unk:
 
-        output_folder_prefix = './evaluation/'
+    output_folder_prefix = './evaluation/one_unk'
+else:
+    output_folder_prefix = './evaluation/no_unk'
 
 
 if use_correct_control:
@@ -1596,10 +1627,10 @@ if vocab_mode == 0:
     if check_total_time:
         output_folder_prefix = output_folder_prefix + '_check'
 
-    logname = f'{output_folder_prefix}/smer_evaluation_{control_number}.log'
+        logname = f'{output_folder_prefix}/smer_evaluation_{control_number}.log'
 
 else:
-    output_folder_prefix += '/remi'
+    output_folder_prefix += '/remi/track/'
     logname = f'{output_folder_prefix}/remi_evaluation_{control_number}.log'
 os.makedirs(output_folder_prefix, exist_ok=True)
 
@@ -1628,9 +1659,18 @@ logger.info(f'output folder is {output_folder_prefix}')
 logger.info(f'total batch size is {len(batches)}')
 logger.info(f'check total time is {check_total_time}')
 logger.info(f'use correct control is {use_correct_control}')
+logger.info(f'bar track control is {bar_track_control}')
+logger.info(f'bar track control at end is {bar_track_control_at_end}')
 
 
-logger.info(f'all unk is {use_unk}')
+if all_unk:
+    logger.info(f'all unk')
+elif bar_unk:
+    logger.info(f'bar unk')
+elif one_unk:
+    logger.info(f'one unk')
+else:
+    logger.info(f'no unk')
 original_control_number = control_number
 if control_number == 5:
     control_numbers = [1,2,3,4]
@@ -1639,6 +1679,8 @@ else:
     control_numbers = [control_number]
 try:
     for control_number in control_numbers:
+        if one_unk and control_number == 1:
+            continue
         # tension
         bar_tension_original_calculated_diffs = []
         # predicted means bar track at end, the model predict the tension by itself
@@ -1802,7 +1844,13 @@ try:
             logger.info(f'idx {idx_number}')
 
             batch = copy.copy(one_batches[idx_number])
+            r = re.compile('i_\d')
+            track_program = list(filter(r.match, batch))
+            track_nums = len(track_program)
 
+            if track_nums != 3:
+                print(f'skip this file with {track_nums} tracks')
+                continue
 
             remove_idx = []
             for idx, token in enumerate(batch):
@@ -1816,11 +1864,10 @@ try:
             if not isinstance(batch,list):
                 batch = batch.tolist()
 
-            r = re.compile('i_\d')
 
 
-            track_program = list(filter(r.match, batch))
-            track_nums = len(track_program)
+
+
 
             r = re.compile('track_\d')
 
@@ -1902,8 +1949,8 @@ try:
                                         if all_unk:
                                             unk_length = len(track_controls)
                                             unks = ['unk' for _ in range(unk_length)]
-                                            for one_unk in unks:
-                                                batch.insert(insert_pos, one_unk)
+                                            for each_unk in unks:
+                                                batch.insert(insert_pos, each_unk)
                                         else:
                                             for track_control in track_controls[::-1]:
                                                 batch.insert(insert_pos, track_control)
@@ -2021,10 +2068,11 @@ try:
                     original_level = int(original_tension_token.split('_')[-1])
 
 
-
-                    if random.random() > 0.7:
+                    # omit this
+                    if random.random() > 1:
                         new_bar_control = 'unk'
                     else:
+                        # only set a value here
                         new_bar_control = np.random.choice(vocab.name_to_tokens[changed_control_name])
 
                         while abs(int(int(original_tension_token.split('_')[-1])) - int(new_bar_control.split('_')[-1])) > 4:
@@ -2032,7 +2080,7 @@ try:
                         # while new_bar_control != original_tension_token and int(new_bar_control.split('_')[-1]) > 8:
                         #     new_bar_control = np.random.choice(vocab.name_to_tokens[changed_control_name])
 
-                    if use_unk:
+                    if bar_unk:
                         ### all local to 'unk'
                         tracks_in_a_bar = bar_with_track_poses[mask_bar_num]
 
@@ -2139,13 +2187,16 @@ try:
 
                                     for bar_track_control_pos in range(track_start,track_start + total_track_control_types + 1):
 
-                                        if use_unk:
+                                        if bar_unk:
                                         ### all local to 'unk'
+                                        ### no local
                                             if batch[bar_track_control_pos] in vocab_class.track_control_tokens:
 
                                                 batch[bar_track_control_pos]= 'unk'
                                         ###
-                                        else:
+                                        elif one_unk:
+                                            ### only one corresponding control to unk
+                                            ### two local
 
                                             if batch[bar_track_control_pos] in vocab.name_to_tokens[selected_control_name]:
                                                 # new_bar_track_control = int(new_track_control[-1]) + random.randint(-1,1)
@@ -2157,6 +2208,19 @@ try:
 
                                                 # batch[bar_track_control_pos] = batch[bar_track_control_pos][:2]  + str(new_bar_track_control)
                                                 batch[bar_track_control_pos] = 'unk'
+                                        elif all_unk:
+                                            pass
+                                        #no unk
+                                        else:
+                                            if batch[bar_track_control_pos] in vocab.name_to_tokens[selected_control_name]:
+                                                new_bar_track_control = int(new_track_control[-1]) + random.randint(-1,1)
+                                                if new_bar_track_control < 0:
+                                                    new_bar_track_control = 0
+                                                if new_bar_track_control > 9:
+                                                    new_bar_track_control = 9
+
+
+                                                batch[bar_track_control_pos] = batch[bar_track_control_pos][:2]  + str(new_bar_track_control)
 
 
             result = generation_all(model, batch, device, vocab, mask_mode,vocab_mode,mask_tracks,mask_bars,bar_track_control=bar_track_control,bar_track_control_at_end=bar_track_control_at_end,control_types=total_control_types,use_correct_control=use_correct_control)
@@ -2320,7 +2384,7 @@ try:
 
                                         this_bar_calculated_polyphony = to_category([calculated_bar_polyphony[track_num][bar_num]], control_bins)
 
-                                        if not use_unk:
+                                        if not bar_unk:
                                             density_original_calculated_diff = abs(
                                                 int(original_track_controls[0].split('_')[-1]) - this_bar_calculated_density[0])
                                             bar_mask_track_calculated_original_diff_dict[track_idx_dict[track_num]][
@@ -2533,7 +2597,7 @@ try:
                                                                          control_bins)
 
 
-                            if not use_unk:
+                            if not bar_unk:
                                 original_track_controls = restored_with_generated_token[
                                                           track_pos[track_idx] + 1:track_pos[
                                                                                        track_idx] + total_track_control_types + 1]
@@ -2543,9 +2607,10 @@ try:
                                 original_polyphony = original_track_controls[2]
 
                                 if selected_control_name == 'polyphony':
-                                    # track_mask_target_track_original_calculated_diff_dict[track_idx_dict[mask_tracks[0]]][
-                                    #     'polyphony'].append(
-                                    #     this_bar_calculated_polyphony[0] - int(original_polyphony[-1]))
+                                    if not one_unk:
+                                        track_mask_target_track_original_calculated_diff_dict[track_idx_dict[mask_tracks[0]]][
+                                            'polyphony'].append(
+                                            this_bar_calculated_polyphony[0] - int(original_polyphony[-1]))
                                     # print(this_bar_calculated_polyphony[0] - int(original_polyphony[-1]))
                                     track_mask_other_track_calculated_original_diff_dict[track_idx_dict[mask_tracks[0]]][
                                         'density'].append(
@@ -2558,9 +2623,10 @@ try:
                                     # print(this_bar_calculated_occupation[0] - int(original_occupation[-1]))
 
                                 if selected_control_name == 'occupation':
-                                    # track_mask_target_track_original_calculated_diff_dict[track_idx_dict[mask_tracks[0]]][
-                                    #     'occupation'].append(
-                                    #     this_bar_calculated_occupation[0] - int(original_occupation[-1]))
+                                    if not one_unk:
+                                        track_mask_target_track_original_calculated_diff_dict[track_idx_dict[mask_tracks[0]]][
+                                            'occupation'].append(
+                                            this_bar_calculated_occupation[0] - int(original_occupation[-1]))
                                     # print(this_bar_calculated_occupation[0] - int(original_occupation[-1]))
                                     track_mask_other_track_calculated_original_diff_dict[track_idx_dict[mask_tracks[0]]][
                                         'density'].append(
@@ -2573,9 +2639,10 @@ try:
                                     # print(this_bar_calculated_polyphony[0] - int(original_polyphony[-1]))
 
                                 if selected_control_name == 'density':
-                                    # track_mask_target_track_original_calculated_diff_dict[track_idx_dict[mask_tracks[0]]][
-                                    #     'density'].append(
-                                    #     this_bar_calculated_density[0] - int(original_density[-1]))
+                                    if not one_unk:
+                                        track_mask_target_track_original_calculated_diff_dict[track_idx_dict[mask_tracks[0]]][
+                                            'density'].append(
+                                            this_bar_calculated_density[0] - int(original_density[-1]))
                                     # print('ori','d:',this_bar_calculated_density[0] - int(original_density[-1]),'y:',this_bar_calculated_polyphony[0] - int(original_polyphony[-1]),'o:',this_bar_calculated_occupation[0] - int(original_occupation[-1]))
 
                                     track_mask_other_track_calculated_original_diff_dict[track_idx_dict[mask_tracks[0]]][

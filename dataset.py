@@ -419,6 +419,10 @@ class ParallelLanguageDataset(Dataset):
                         weight = [10, 1]
                     if track_nums == 3:
                         weight = [10, 5, 1]
+                    if track_nums == 4:
+                        weight = [10, 5, 3, 1]
+                    if track_nums == 5:
+                        weight = [10, 5, 3, 2,1]
                     if len(range(track_nums)) != len(weight):
                         print('what')
                         print(range(track_nums))
@@ -1907,6 +1911,7 @@ def shift_event_keys(event):
 
 # event = pickle.load(open('/Users/ruiguo/Documents/mm2021/added_event','rb'))
 # cal_separate_event('/Users/ruiguo/Documents/mm2021/')
+# event_folder = '/home/ruiguo/dataset/lmd/lmd_melody_bass_event_new/'
 event_folder = '/home/ruiguo/dataset/lmd/lmd_melody_bass_event_new/'
 
 

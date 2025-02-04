@@ -6,8 +6,11 @@ import pretty_midi
 import sys
 import copy
 import numpy as np
-
+# import matplotlib
+# matplotlib.use('Agg')
+# import matplotlib.pyplot as plt
 import itertools
+
 
 import json
 import logging
@@ -172,7 +175,6 @@ def ce_sum(indices, start=None, end=None):
         for pitch in data:
             total += pitch_index_to_position(pitch)
             count += 1
-
     return total/count
 
 
@@ -378,7 +380,6 @@ def cal_tension(piano_roll,beat_time,beat_indices,down_beat_time,down_beat_indic
 
             silent = np.where(np.linalg.norm(merged_centroids, axis=-1) == 0)
             merged_centroids = np.array(merged_centroids)
-
             key_diff = merged_centroids - key_pos
             key_diff = np.linalg.norm(key_diff, axis=-1)
 
@@ -469,38 +470,43 @@ def cal_tension(piano_roll,beat_time,beat_indices,down_beat_time,down_beat_indic
 
 
         centroids = cal_centroid(piano_roll, note_shift,key_change_beat,changed_note_shift)
-
-        silent = np.where(np.linalg.norm(centroids, axis=-1) == 0)
+        merged_centroids = merge_tension(centroids,beat_indices, down_beat_indices, window_size=window_size)
+        merged_centroids = np.array(merged_centroids)
 
         if window_size == -1:
             window_time = down_beat_time
         else:
             window_time = beat_time[::window_size]
+        silent = np.where(np.linalg.norm(merged_centroids, axis=-1) < 0.1)
 
+        if key_change_beat != -1:
+            key_diff = np.zeros(merged_centroids.shape[0])
+            changed_step = int(key_change_beat / abs(window_size))
+            for step in range(merged_centroids.shape[0]):
+                if step < changed_step:
+                    key_diff[step] = np.linalg.norm(merged_centroids[step] - key_pos)
+                else:
+                    key_diff[step] = np.linalg.norm(merged_centroids[step] - changed_key_pos)
+        else:
+            key_diff = np.linalg.norm(merged_centroids - key_pos,axis=-1)
 
-        key_diff = np.linalg.norm(centroids - key_pos, axis=-1)
 
         key_diff[silent] = 0
 
-        merged_centroids = merge_tension(key_diff,beat_indices, down_beat_indices, window_size=window_size)
-        merged_centroids = np.array(merged_centroids)
-
         diameters = cal_diameter(piano_roll, note_shift,key_change_beat,changed_note_shift)
         diameters = merge_tension(diameters, beat_indices, down_beat_indices, window_size)
+        diameters[silent] = 0
         #
+
+        centroid_diff = np.diff(merged_centroids, axis=0)
         #
-        # centroid_diff = np.diff(merged_centroids, axis=0)
-        # #
-        # np.nan_to_num(centroid_diff, copy=False)
-        #
-        # if len(centroid_diff) == 0:
-        #     centroid_diff = 0
-        # else:
-        #     centroid_diff = np.linalg.norm(centroid_diff, axis=-1)
-        #     centroid_diff = np.insert(centroid_diff, 0, 0)
+        np.nan_to_num(centroid_diff, copy=False)
+
+        centroid_diff = np.linalg.norm(centroid_diff, axis=-1)
+        centroid_diff = np.insert(centroid_diff, 0, 0)
 
 
-        total_tension = merged_centroids
+        total_tension = key_diff
 
 
         return [total_tension, diameters, key_name,changed_key_name,
@@ -641,20 +647,16 @@ def detect_key_change(key_diff,diameter,start_ratio=0.5):
 
 
 def remove_drum_track(pm):
-    instrument_idx = []
-    for idx in range(len(pm.instruments)):
-        if pm.instruments[idx].is_drum:
-            instrument_idx.append(idx)
-    for idx in instrument_idx[::-1]:
-        del pm.instruments[idx]
+
+    for instrument in pm.instruments:
+        if instrument.is_drum:
+            pm.instruments.remove(instrument)
     return pm
+
 
 
 def get_beat_time(pm, beat_division=4):
     beats = pm.get_beats()
-
-    if pm.time_signature_changes[0].denominator == 8:
-        beat_division = int(beat_division * 3 / 2)
 
     divided_beats = []
     for i in range(len(beats) - 1):
@@ -669,14 +671,7 @@ def get_beat_time(pm, beat_division=4):
 
     down_beats = pm.get_downbeats()
     if divided_beats[-1] > down_beats[-1]:
-        if len(down_beats) == 1:
-            if pm.time_signature_changes[0].denominator == 4 and pm.time_signature_changes[0].numerator == 4:
-                bar_duration = (beats[1] - beats[0]) * 4
-            else:
-                bar_duration = (beats[1] - beats[0]) * 2
-            down_beats = np.append(down_beats, bar_duration + down_beats[-1])
-        else:
-            down_beats = np.append(down_beats, down_beats[-1] - down_beats[-2] + down_beats[-1])
+        down_beats = np.append(down_beats, down_beats[-1] - down_beats[-2] + down_beats[-1])
 
     down_beats = np.unique(down_beats, axis=0)
 
@@ -693,7 +688,11 @@ def get_beat_time(pm, beat_division=4):
 def extract_notes(pm,track_num):
     try:
         # pm = pretty_midi.PrettyMIDI(file_name)
-        pm = remove_drum_track(pm)
+        new_pm = copy.deepcopy(pm)
+        new_pm = remove_drum_track(new_pm)
+        for instrument in new_pm.instruments:
+            if instrument.notes[0].pitch == 1:
+                del instrument.notes[0]
 
         # if len(pm.time_signature_changes) > 1:
         #     logger.info(f'multiple time signature, skip {file_name}')
@@ -707,19 +706,19 @@ def extract_notes(pm,track_num):
         if track_num != 0:
             # if len(pm.instruments) < track_num:
                 #                f'less than the required track num {track_num}. Use all the tracks')
-            pm.instruments = pm.instruments[:track_num]
+            new_pm.instruments = new_pm.instruments[:track_num]
 
+        new_pm.write('no_drum.mid')
+        sixteenth_time, beat_time,down_beat_time,beat_indices,down_beat_indices = get_beat_time(new_pm, beat_division=4)
 
-        sixteenth_time, beat_time,down_beat_time,beat_indices,down_beat_indices = get_beat_time(pm, beat_division=4)
-
-        piano_roll = get_piano_roll(pm, sixteenth_time)
+        piano_roll = get_piano_roll(new_pm, sixteenth_time)
 
     except (ValueError, EOFError, IndexError, OSError, KeyError, ZeroDivisionError) as e:
         exception_str = 'Unexpected error ', e, sys.exc_info()[0]
         print(exception_str)
         return None
 
-    return [pm,piano_roll,sixteenth_time,beat_time,down_beat_time,beat_indices,down_beat_indices]
+    return [new_pm,piano_roll,sixteenth_time,beat_time,down_beat_time,beat_indices,down_beat_indices]
 
 def walk(folder_name):
     files = []
@@ -800,6 +799,8 @@ def key_to_key_pos(key_indices,key_pos):
     diffs = np.linalg.norm(np.array(key_positions)-key_pos,axis=1)
     return diffs
 
+
+#
 
 #
 # def process_file(file_name,result_dict):

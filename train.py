@@ -150,13 +150,13 @@ def main(**kwargs):
 
     config = {"batch_size": 2,
               "eos_weight": 0.8,
-              'd_model': 512,
+              'd_model': 256,
               'lr': lr,
               'num_encoder_layers': encoder_layers,
               'epochs': num_epochs,
               # 'num_decoder_layers': tune.grid_search([4]),
               # 'dim_feedforward': tune.grid_search([2048]),
-              'nhead': 8,
+              'nhead': 4,
 
               }
 
@@ -204,7 +204,7 @@ def run(config, vocab, vocab_mode, fine_tuning, reset_epoch, control_mode=0, che
     else:
         resume = None
     if platform == 'local':
-        wandb_dir = '/home/data/guorui/'
+        wandb_dir = '/its/home/rg408/wandb'
     else:
         wandb_dir = './'
         mode = 'offline'
@@ -303,7 +303,9 @@ def run(config, vocab, vocab_mode, fine_tuning, reset_epoch, control_mode=0, che
             print(f'optim loaded lr is {optim.param_groups[0]["lr"]}')
 
         if platform == 'local':
-            folder_prefix = '/home/data/guorui/dataset/lmd/batches/'
+            # folder_prefix = '/home/data/guorui/dataset/lmd/batches/'
+            folder_prefix = '/its/home/rg408/dataset/batches/'
+
         else:
             folder_prefix = '../dataset/batches/'
 
@@ -319,12 +321,19 @@ def run(config, vocab, vocab_mode, fine_tuning, reset_epoch, control_mode=0, che
                     test_batch_length_name = 'track_dataset/smer_mock_batch_lengths'
                 else:
                     # bar control added
-                    train_batch_name = 'bar_dataset/smer_bar_mock_batch'
-                    train_length_name = 'bar_dataset/smer_bar_mock_batch_lengths'
-                    valid_batch_name = 'bar_dataset/smer_bar_mock_batch'
-                    valid_batch_length_name = 'bar_dataset/smer_bar_mock_batch_lengths'
-                    test_batch_name = 'bar_dataset/smer_bar_mock_batch'
-                    test_batch_length_name = 'bar_dataset/smer_bar_mock_batch_lengths'
+                    # train_batch_name = 'bar_dataset/smer_bar_mock_batch'
+                    # train_length_name = 'bar_dataset/smer_bar_mock_batch_lengths'
+                    # valid_batch_name = 'bar_dataset/smer_bar_mock_batch'
+                    # valid_batch_length_name = 'bar_dataset/smer_bar_mock_batch_lengths'
+                    # test_batch_name = 'bar_dataset/smer_bar_mock_batch'
+                    # test_batch_length_name = 'bar_dataset/smer_bar_mock_batch_lengths'
+
+                    train_batch_name = 'classical_finetuning_training_batches'
+                    train_length_name = 'classical_finetuning_training_batch_lengths'
+                    valid_batch_name = 'classical_finetuning_validation_batches'
+                    valid_batch_length_name = 'classical_finetuning_validation_batch_lengths'
+
+
 
 
 
@@ -359,7 +368,10 @@ def run(config, vocab, vocab_mode, fine_tuning, reset_epoch, control_mode=0, che
                     valid_batch_name = 'bar_dataset/smer_bar_validation_batch'
                     valid_batch_length_name = 'bar_dataset/smer_bar_validation_batch_lengths'
 
-
+                    # train_batch_name = 'blur_training_batches'
+                    # train_length_name = 'blur_training_batch_lengths'
+                    # valid_batch_name = 'blur_validation_batches'
+                    # valid_batch_length_name = 'blur_validation_batch_lengths'
 
             else:
                 if control_mode == 0:
@@ -688,219 +700,230 @@ def run(config, vocab, vocab_mode, fine_tuning, reset_epoch, control_mode=0, che
                 polyphony_losses = 0
 
                 for step, data in enumerate(train_data_loader):
-                    total_step += 1
-                    example_ct += len(data['input'])
-                    # Send the batches and key_padding_masks to gpu
-                    src, src_key_padding_mask = data['input'].to(device), data['input_pad_mask'].to(device)
-                    tgt_inp, tgt_key_padding_mask = data['target_in'].to(device), data['target_pad_mask'].to(device)
-                    tgt_out = data['target_out'].to(device)
+                    try:
+                        total_step += 1
+                        example_ct += len(data['input'])
+                        # Send the batches and key_padding_masks to gpu
+                        src, src_key_padding_mask = data['input'].to(device), data['input_pad_mask'].to(device)
+                        tgt_inp, tgt_key_padding_mask = data['target_in'].to(device), data['target_pad_mask'].to(device)
+                        tgt_out = data['target_out'].to(device)
 
-                    memory_key_padding_mask = src_key_padding_mask.clone()
+                        memory_key_padding_mask = src_key_padding_mask.clone()
 
-                    # Create tgt_inp and tgt_out (which is tgt_inp but shifted by 1)
+                        # Create tgt_inp and tgt_out (which is tgt_inp but shifted by 1)
 
-                    tgt_mask = gen_nopeek_mask(tgt_inp.shape[1])
-                    tgt_mask = torch.tensor(
-                        np.repeat(np.expand_dims(tgt_mask, 0), memory_key_padding_mask.shape[0], axis=0)).float()
+                        tgt_mask = gen_nopeek_mask(tgt_inp.shape[1])
+                        tgt_mask = torch.tensor(
+                            np.repeat(np.expand_dims(tgt_mask, 0), memory_key_padding_mask.shape[0], axis=0)).float()
 
-                    tgt_mask = tgt_mask.to(device)
+                        tgt_mask = tgt_mask.to(device)
 
-                    # Forward
-                    optim.zero_grad()
-                    outputs, weights = model(src, tgt_inp, src_key_padding_mask, tgt_key_padding_mask,
-                                             memory_key_padding_mask, tgt_mask)
+                        # Forward
+                        optim.zero_grad()
+                        outputs, weights = model(src, tgt_inp, src_key_padding_mask, tgt_key_padding_mask,
+                                                 memory_key_padding_mask, tgt_mask)
 
-                    loss_input_1 = rearrange(outputs, 'b t v -> (b t) v')
-                    loss_input_2 = rearrange(tgt_out, 'b o -> (b o)')
-                    loss1 = meta_loss(loss_input_1, loss_input_2)
-                    loss2 = time_signature_loss(loss_input_1, loss_input_2)
-                    loss3 = program_loss(loss_input_1, loss_input_2)
-                    loss4 = tempo_loss(loss_input_1, loss_input_2)
-                    loss5 = structure_loss(loss_input_1, loss_input_2)
-                    loss6 = pitch_loss(loss_input_1, loss_input_2)
-                    loss7 = duration_loss(loss_input_1, loss_input_2)
+                        loss_input_1 = rearrange(outputs, 'b t v -> (b t) v')
+                        loss_input_2 = rearrange(tgt_out, 'b o -> (b o)')
+                        loss1 = meta_loss(loss_input_1, loss_input_2)
+                        loss2 = time_signature_loss(loss_input_1, loss_input_2)
+                        loss3 = program_loss(loss_input_1, loss_input_2)
+                        loss4 = tempo_loss(loss_input_1, loss_input_2)
+                        loss5 = structure_loss(loss_input_1, loss_input_2)
+                        loss6 = pitch_loss(loss_input_1, loss_input_2)
+                        loss7 = duration_loss(loss_input_1, loss_input_2)
 
-                    loss1 = torch.sum(loss1) / ce_weight_all[loss_input_2].sum()
-                    loss2 = torch.sum(loss2) / ce_weight_all[loss_input_2].sum()
-                    loss3 = torch.sum(loss3) / ce_weight_all[loss_input_2].sum()
-                    loss4 = torch.sum(loss4) / ce_weight_all[loss_input_2].sum()
-                    loss5 = torch.sum(loss5) / ce_weight_all[loss_input_2].sum()
-                    loss6 = torch.sum(loss6) / ce_weight_all[loss_input_2].sum()
-                    loss7 = torch.sum(loss7) / ce_weight_all[loss_input_2].sum()
+                        loss1 = torch.sum(loss1) / ce_weight_all[loss_input_2].sum()
+                        loss2 = torch.sum(loss2) / ce_weight_all[loss_input_2].sum()
+                        loss3 = torch.sum(loss3) / ce_weight_all[loss_input_2].sum()
+                        loss4 = torch.sum(loss4) / ce_weight_all[loss_input_2].sum()
+                        loss5 = torch.sum(loss5) / ce_weight_all[loss_input_2].sum()
+                        loss6 = torch.sum(loss6) / ce_weight_all[loss_input_2].sum()
+                        loss7 = torch.sum(loss7) / ce_weight_all[loss_input_2].sum()
 
-                    loss = loss1 + loss2 + loss3 + loss4 + loss5 + loss6 + loss7
-
-                    if 'tensile' in vocab.control_indices.keys():
-                        tensile_this_loss = tensile_loss(loss_input_1, loss_input_2)
-
-                        tensile_this_loss = torch.sum(tensile_this_loss) / ce_weight_all[loss_input_2].sum()
-                        loss += tensile_this_loss
-
-                        tensile_losses += tensile_this_loss.item()
-
-                    if 'key' in vocab.control_indices.keys():
-                        key_this_loss = key_loss(loss_input_1, loss_input_2)
-
-                        key_this_loss = torch.sum(key_this_loss) / ce_weight_all[loss_input_2].sum()
-                        loss += key_this_loss
-                        key_losses += key_this_loss.item()
-
-                    if 'density' in vocab.control_indices.keys():
-                        density_this_loss = density_loss(loss_input_1, loss_input_2)
-
-                        density_this_loss = torch.sum(density_this_loss) / ce_weight_all[loss_input_2].sum()
-                        loss += density_this_loss
-                        density_losses += density_this_loss.item()
-
-                    if 'occupation' in vocab.control_indices.keys():
-                        occupation_this_loss = occupation_loss(loss_input_1, loss_input_2)
-
-                        occupation_this_loss = torch.sum(occupation_this_loss) / ce_weight_all[loss_input_2].sum()
-                        loss += occupation_this_loss
-                        occupation_losses += occupation_this_loss.item()
-
-                    if 'polyphony' in vocab.control_indices.keys():
-                        polyphony_this_loss = polyphony_loss(loss_input_1, loss_input_2)
-
-                        polyphony_this_loss = torch.sum(polyphony_this_loss) / ce_weight_all[loss_input_2].sum()
-                        loss += polyphony_this_loss
-                        polyphony_losses += polyphony_this_loss.item()
-
-                    # Backpropagate and update optim
-                    loss.backward()
-
-                    # optim.step_and_update_lr()
-                    optim.step()
-
-                    total_loss += loss.item()
-                    meta_losses += loss1.item()
-                    time_signature_losses += loss2.item()
-                    program_losses += loss3.item()
-                    tempo_losses += loss4.item()
-                    structure_losses += loss5.item()
-                    pitch_losses += loss6.item()
-                    duration_losses += loss7.item()
-
-                    train_losses.append(loss.item())
-
-                    # pbar.update(1)
-                    if step % print_every == print_every - 1:
-
-                        log_step += 1
-                        # if step % learning_rate_adjust_interval == learning_rate_adjust_interval - 1:
-                        #     scheduler_optim.step(total_loss / print_every)
-                        # pbar.close()
-                        times = int((step / (print_every - 1)))
-
-                        src_token = []
-
-                        for i, output in enumerate(src[0]):
-                            output_token = vocab.index2char(output.item())
-                            src_token.append(output_token)
-
-                        accuracies, generated_output, target_output = accuracy(outputs, tgt_out, vocab)
-
-                        for token_type in accuracies.keys():
-                            every_print_accuracy[token_type] += accuracies[token_type]
-
-                        wandb.log({"epoch": epoch,
-                                   "train_loss": loss,
-                                   "meta_loss": loss1,
-                                   "time_signature_loss": loss2,
-                                   "program_loss": loss3,
-                                   "tempo_loss": loss4,
-                                   "structure_loss": loss5,
-                                   "pitch_loss": loss6,
-                                   "duration_loss": loss7,
-                                   "total_accuracy": every_print_accuracy["total"] / times,
-                                   "lr": optim.param_groups[0]['lr'],
-                                   "real_batch_num": example_ct,
-                                   }, step=log_step)
+                        loss = loss1 + loss2 + loss3 + loss4 + loss5 + loss6 + loss7
 
                         if 'tensile' in vocab.control_indices.keys():
-                            wandb.log({"tensile": tensile_this_loss}, step=log_step)
+                            tensile_this_loss = tensile_loss(loss_input_1, loss_input_2)
+
+                            tensile_this_loss = torch.sum(tensile_this_loss) / ce_weight_all[loss_input_2].sum()
+                            loss += tensile_this_loss
+
+                            tensile_losses += tensile_this_loss.item()
 
                         if 'key' in vocab.control_indices.keys():
-                            wandb.log({"key": key_this_loss}, step=log_step)
+                            key_this_loss = key_loss(loss_input_1, loss_input_2)
+
+                            key_this_loss = torch.sum(key_this_loss) / ce_weight_all[loss_input_2].sum()
+                            loss += key_this_loss
+                            key_losses += key_this_loss.item()
+
                         if 'density' in vocab.control_indices.keys():
-                            wandb.log({"density": density_this_loss}, step=log_step)
+                            density_this_loss = density_loss(loss_input_1, loss_input_2)
+
+                            density_this_loss = torch.sum(density_this_loss) / ce_weight_all[loss_input_2].sum()
+                            loss += density_this_loss
+                            density_losses += density_this_loss.item()
 
                         if 'occupation' in vocab.control_indices.keys():
-                            wandb.log({"occupation": occupation_this_loss}, step=log_step)
+                            occupation_this_loss = occupation_loss(loss_input_1, loss_input_2)
+
+                            occupation_this_loss = torch.sum(occupation_this_loss) / ce_weight_all[loss_input_2].sum()
+                            loss += occupation_this_loss
+                            occupation_losses += occupation_this_loss.item()
+
                         if 'polyphony' in vocab.control_indices.keys():
-                            wandb.log({"polyphony": polyphony_this_loss}, step=log_step)
+                            polyphony_this_loss = polyphony_loss(loss_input_1, loss_input_2)
 
-                        logger.info(f'Epoch [{epoch + 1} / {num_epochs}] \t Step [{step + 1} / {len(train_data_loader)}] \n \
-                                            train loss: {total_loss / print_every} \n \
-                                            total accuracy: {every_print_accuracy["total"] / times} \n \
-                                            meta loss: {meta_losses / print_every} \n \
-                                            time signature loss: {time_signature_losses / print_every} \n \
-                                            program loss : {program_losses / print_every} \n \
-                                            tempo loss: {tempo_losses / print_every} \n \
-                                            structure loss: {structure_losses / print_every} \n \
-                                            pitch loss: {pitch_losses / print_every} \n \
-                                            duration loss: {duration_losses / print_every} \n \
-                                            ')
-                        if 'tensile' in vocab.control_indices.keys() and epoch < pretraining_epochs:
-                            logger.info(f'tensile loss: {tensile_losses / print_every}')
+                            polyphony_this_loss = torch.sum(polyphony_this_loss) / ce_weight_all[loss_input_2].sum()
+                            loss += polyphony_this_loss
+                            polyphony_losses += polyphony_this_loss.item()
 
-                        if 'key' in vocab.control_indices.keys() and epoch < pretraining_epochs:
-                            logger.info(f'key loss: {key_losses / print_every}')
-                        if 'density' in vocab.control_indices.keys() and epoch < pretraining_epochs:
-                            logger.info(f'density loss: {density_losses / print_every}')
+                        # Backpropagate and update optim
+                        loss.backward()
 
-                        if 'occupation' in vocab.control_indices.keys() and epoch < pretraining_epochs:
-                            logger.info(f'occupation loss: {occupation_losses / print_every}')
-                        if 'polyphony' in vocab.control_indices.keys() and epoch < pretraining_epochs:
-                            logger.info(f'polyphony loss: {polyphony_losses / print_every}')
+                        # optim.step_and_update_lr()
+                        optim.step()
 
-                        if lr != optim.param_groups[0]['lr']:
-                            lr = optim.param_groups[0]['lr']
-                            logger.info(f'learning rate is {lr}')
+                        total_loss += loss.item()
+                        meta_losses += loss1.item()
+                        time_signature_losses += loss2.item()
+                        program_losses += loss3.item()
+                        tempo_losses += loss4.item()
+                        structure_losses += loss5.item()
+                        pitch_losses += loss6.item()
+                        duration_losses += loss7.item()
 
-                        for token_type in every_print_accuracy.keys():
-                            logger.debug(f'{token_type} accuracy is {every_print_accuracy[token_type] / times}')
+                        train_losses.append(loss.item())
 
-                        for token_type in every_print_accuracy.keys():
-                            wandb.log({f'{token_type}_acc': every_print_accuracy[token_type] / times,
-                                       'real_batch_num': example_ct,
+                        # pbar.update(1)
+                        if step % print_every == print_every - 1:
+
+                            log_step += 1
+                            # if step % learning_rate_adjust_interval == learning_rate_adjust_interval - 1:
+                            #     scheduler_optim.step(total_loss / print_every)
+                            # pbar.close()
+                            times = int((step / (print_every - 1)))
+
+                            src_token = []
+
+                            for i, output in enumerate(src[0]):
+                                output_token = vocab.index2char(output.item())
+                                src_token.append(output_token)
+
+                            accuracies, generated_output, target_output = accuracy(outputs, tgt_out, vocab)
+
+                            for token_type in accuracies.keys():
+                                every_print_accuracy[token_type] += accuracies[token_type]
+
+                            wandb.log({"epoch": epoch,
+                                       "train_loss": loss,
+                                       "meta_loss": loss1,
+                                       "time_signature_loss": loss2,
+                                       "program_loss": loss3,
+                                       "tempo_loss": loss4,
+                                       "structure_loss": loss5,
+                                       "pitch_loss": loss6,
+                                       "duration_loss": loss7,
+                                       "total_accuracy": every_print_accuracy["total"] / times,
+                                       "lr": optim.param_groups[0]['lr'],
+                                       "real_batch_num": example_ct,
                                        }, step=log_step)
 
-                        total_loss = 0
-                        meta_losses = 0
-                        time_signature_losses = 0
-                        program_losses = 0
-                        tempo_losses = 0
-                        structure_losses = 0
-                        pitch_losses = 0
-                        duration_losses = 0
+                            if 'tensile' in vocab.control_indices.keys():
+                                wandb.log({"tensile": tensile_this_loss}, step=log_step)
 
-                        key_losses = 0
-                        tensile_losses = 0
+                            if 'key' in vocab.control_indices.keys():
+                                wandb.log({"key": key_this_loss}, step=log_step)
+                            if 'density' in vocab.control_indices.keys():
+                                wandb.log({"density": density_this_loss}, step=log_step)
 
-                        density_losses = 0
+                            if 'occupation' in vocab.control_indices.keys():
+                                wandb.log({"occupation": occupation_this_loss}, step=log_step)
+                            if 'polyphony' in vocab.control_indices.keys():
+                                wandb.log({"polyphony": polyphony_this_loss}, step=log_step)
 
-                        occupation_losses = 0
-                        polyphony_losses = 0
+                            logger.info(f'Epoch [{epoch + 1} / {num_epochs}] \t Step [{step + 1} / {len(train_data_loader)}] \n \
+                                                train loss: {total_loss / print_every} \n \
+                                                total accuracy: {every_print_accuracy["total"] / times} \n \
+                                                meta loss: {meta_losses / print_every} \n \
+                                                time signature loss: {time_signature_losses / print_every} \n \
+                                                program loss : {program_losses / print_every} \n \
+                                                tempo loss: {tempo_losses / print_every} \n \
+                                                structure loss: {structure_losses / print_every} \n \
+                                                pitch loss: {pitch_losses / print_every} \n \
+                                                duration loss: {duration_losses / print_every} \n \
+                                                ')
+                            if 'tensile' in vocab.control_indices.keys() and epoch < pretraining_epochs:
+                                logger.info(f'tensile loss: {tensile_losses / print_every}')
 
-                    # logger.info(f'Epoch [{epoch + 1} / {num_epochs}] \t Step [{step + 1} / {len(train_data_loader)}] \n '
-                    #             f'Train Loss: {total_loss / print_every} \t Accuracy {accuracies["total"] / times} \n'
-                    if step % (print_every * 10) == print_every * 10 - 1:
-                        # wandb.log({'input_size':src.size(),
-                        #            'input':src_token[:50],
-                        #             'output_size': len(target_output),
-                        #              'generated_output': generated_output[:50],
-                        #              'target_output': target_output[:50],
-                        #              })
+                            if 'key' in vocab.control_indices.keys() and epoch < pretraining_epochs:
+                                logger.info(f'key loss: {key_losses / print_every}')
+                            if 'density' in vocab.control_indices.keys() and epoch < pretraining_epochs:
+                                logger.info(f'density loss: {density_losses / print_every}')
 
-                        logger.debug(f'input size is {src.size()} \n'
+                            if 'occupation' in vocab.control_indices.keys() and epoch < pretraining_epochs:
+                                logger.info(f'occupation loss: {occupation_losses / print_every}')
+                            if 'polyphony' in vocab.control_indices.keys() and epoch < pretraining_epochs:
+                                logger.info(f'polyphony loss: {polyphony_losses / print_every}')
+
+                            if lr != optim.param_groups[0]['lr']:
+                                lr = optim.param_groups[0]['lr']
+                                logger.info(f'learning rate is {lr}')
+
+                            for token_type in every_print_accuracy.keys():
+                                logger.debug(f'{token_type} accuracy is {every_print_accuracy[token_type] / times}')
+
+                            for token_type in every_print_accuracy.keys():
+                                wandb.log({f'{token_type}_acc': every_print_accuracy[token_type] / times,
+                                           'real_batch_num': example_ct,
+                                           }, step=log_step)
+
+                            total_loss = 0
+                            meta_losses = 0
+                            time_signature_losses = 0
+                            program_losses = 0
+                            tempo_losses = 0
+                            structure_losses = 0
+                            pitch_losses = 0
+                            duration_losses = 0
+
+                            key_losses = 0
+                            tensile_losses = 0
+
+                            density_losses = 0
+
+                            occupation_losses = 0
+                            polyphony_losses = 0
+
+                        # logger.info(f'Epoch [{epoch + 1} / {num_epochs}] \t Step [{step + 1} / {len(train_data_loader)}] \n '
+                        #             f'Train Loss: {total_loss / print_every} \t Accuracy {accuracies["total"] / times} \n'
+                        if step % (print_every * 10) == print_every * 10 - 1:
+                            # wandb.log({'input_size':src.size(),
+                            #            'input':src_token[:50],
+                            #             'output_size': len(target_output),
+                            #              'generated_output': generated_output[:50],
+                            #              'target_output': target_output[:50],
+                            #              })
+
+                            logger.debug(f'input size is {src.size()} \n'
+                                         f'input is : {src_token[:50]} \n'
+                                         f'output size is {len(target_output)} \n'
+                                         f'generated output: {generated_output[:50]} \n'
+                                         f'target output: {target_output[:50]} \n'
+                                         )
+
+                            # pbar = tqdm(total=print_every, leave=False)
+                    except Exception as e:
+                        logger.error(f'error in epoch {epoch} step {step}')
+                        logger.error(f'input size is {src.size()} \n'
                                      f'input is : {src_token[:50]} \n'
                                      f'output size is {len(target_output)} \n'
                                      f'generated output: {generated_output[:50]} \n'
                                      f'target output: {target_output[:50]} \n'
                                      )
-
-                        # pbar = tqdm(total=print_every, leave=False)
+                        logger.error(f'exception {e}')
+                        continue
 
                 logger.info(f'Epoch [{epoch + 1} / {num_epochs} end]')
 
@@ -1051,98 +1074,101 @@ def validate(valid_loader, model, ce_weight_all, criteria, device, vocab, logger
         total_loss[token_type] = 0
 
     for data in iter(valid_loader):
-        total_steps += 1
-        if total_steps % 100 == 0:
-            logger.info(f'validation steps is {total_steps} / {len(valid_loader)}')
-        # Send the batches and key_padding_masks to gpu
-        src, src_key_padding_mask = data['input'].to(device), data['input_pad_mask'].to(device)
-        tgt_inp, tgt_key_padding_mask = data['target_in'].to(device), data['target_pad_mask'].to(device)
-        tgt_out = data['target_out'].to(device)
+        try:
+            total_steps += 1
+            if total_steps % 100 == 0:
+                logger.info(f'validation steps is {total_steps} / {len(valid_loader)}')
+            # Send the batches and key_padding_masks to gpu
+            src, src_key_padding_mask = data['input'].to(device), data['input_pad_mask'].to(device)
+            tgt_inp, tgt_key_padding_mask = data['target_in'].to(device), data['target_pad_mask'].to(device)
+            tgt_out = data['target_out'].to(device)
 
-        memory_key_padding_mask = src_key_padding_mask.clone()
+            memory_key_padding_mask = src_key_padding_mask.clone()
 
-        # Create tgt_inp and tgt_out (which is tgt_inp but shifted by 1)
+            # Create tgt_inp and tgt_out (which is tgt_inp but shifted by 1)
 
-        tgt_mask = gen_nopeek_mask(tgt_inp.shape[1])
-        tgt_mask = torch.tensor(
-            np.repeat(np.expand_dims(tgt_mask, 0), memory_key_padding_mask.shape[0], axis=0)).float()
+            tgt_mask = gen_nopeek_mask(tgt_inp.shape[1])
+            tgt_mask = torch.tensor(
+                np.repeat(np.expand_dims(tgt_mask, 0), memory_key_padding_mask.shape[0], axis=0)).float()
 
-        tgt_mask = tgt_mask.to(device)
-        with torch.no_grad():
-            outputs, weights = model(src, tgt_inp, src_key_padding_mask, tgt_key_padding_mask, memory_key_padding_mask,
-                                     tgt_mask)
+            tgt_mask = tgt_mask.to(device)
+            with torch.no_grad():
+                outputs, weights = model(src, tgt_inp, src_key_padding_mask, tgt_key_padding_mask, memory_key_padding_mask,
+                                         tgt_mask)
 
-            loss_input_1 = rearrange(outputs, 'b t v -> (b t) v')
-            loss_input_2 = rearrange(tgt_out, 'b o -> (b o)')
+                loss_input_1 = rearrange(outputs, 'b t v -> (b t) v')
+                loss_input_2 = rearrange(tgt_out, 'b o -> (b o)')
 
-            loss1 = meta_loss(loss_input_1, loss_input_2)
-            loss2 = time_signature_loss(loss_input_1, loss_input_2)
-            loss3 = program_loss(loss_input_1, loss_input_2)
-            loss4 = tempo_loss(loss_input_1, loss_input_2)
-            loss5 = structure_loss(loss_input_1, loss_input_2)
-            loss6 = pitch_loss(loss_input_1, loss_input_2)
-            loss7 = duration_loss(loss_input_1, loss_input_2)
+                loss1 = meta_loss(loss_input_1, loss_input_2)
+                loss2 = time_signature_loss(loss_input_1, loss_input_2)
+                loss3 = program_loss(loss_input_1, loss_input_2)
+                loss4 = tempo_loss(loss_input_1, loss_input_2)
+                loss5 = structure_loss(loss_input_1, loss_input_2)
+                loss6 = pitch_loss(loss_input_1, loss_input_2)
+                loss7 = duration_loss(loss_input_1, loss_input_2)
 
-            loss1 = torch.sum(loss1) / ce_weight_all[loss_input_2].sum()
-            loss2 = torch.sum(loss2) / ce_weight_all[loss_input_2].sum()
-            loss3 = torch.sum(loss3) / ce_weight_all[loss_input_2].sum()
-            loss4 = torch.sum(loss4) / ce_weight_all[loss_input_2].sum()
-            loss5 = torch.sum(loss5) / ce_weight_all[loss_input_2].sum()
-            loss6 = torch.sum(loss6) / ce_weight_all[loss_input_2].sum()
-            loss7 = torch.sum(loss7) / ce_weight_all[loss_input_2].sum()
+                loss1 = torch.sum(loss1) / ce_weight_all[loss_input_2].sum()
+                loss2 = torch.sum(loss2) / ce_weight_all[loss_input_2].sum()
+                loss3 = torch.sum(loss3) / ce_weight_all[loss_input_2].sum()
+                loss4 = torch.sum(loss4) / ce_weight_all[loss_input_2].sum()
+                loss5 = torch.sum(loss5) / ce_weight_all[loss_input_2].sum()
+                loss6 = torch.sum(loss6) / ce_weight_all[loss_input_2].sum()
+                loss7 = torch.sum(loss7) / ce_weight_all[loss_input_2].sum()
 
-            loss = loss1 + loss2 + loss3 + loss4 + loss5 + loss6 + loss7
+                loss = loss1 + loss2 + loss3 + loss4 + loss5 + loss6 + loss7
 
-            total_loss['total'] += loss.item()
-            total_loss['meta'] += loss1.item()
-            total_loss['time_signature'] += loss2.item()
-            total_loss['program'] += loss3.item()
-            total_loss['tempo'] += loss4.item()
-            total_loss['structure'] += loss5.item()
-            total_loss['pitch'] += loss6.item()
-            total_loss['duration'] += loss7.item()
+                total_loss['total'] += loss.item()
+                total_loss['meta'] += loss1.item()
+                total_loss['time_signature'] += loss2.item()
+                total_loss['program'] += loss3.item()
+                total_loss['tempo'] += loss4.item()
+                total_loss['structure'] += loss5.item()
+                total_loss['pitch'] += loss6.item()
+                total_loss['duration'] += loss7.item()
 
-            if 'tensile' in vocab.control_indices.keys():
-                tensile_this_loss = tensile_loss(loss_input_1, loss_input_2)
+                if 'tensile' in vocab.control_indices.keys():
+                    tensile_this_loss = tensile_loss(loss_input_1, loss_input_2)
 
-                tensile_this_loss = torch.sum(tensile_this_loss) / ce_weight_all[loss_input_2].sum()
-                loss += tensile_this_loss
+                    tensile_this_loss = torch.sum(tensile_this_loss) / ce_weight_all[loss_input_2].sum()
+                    loss += tensile_this_loss
 
-                total_loss['tensile'] += tensile_this_loss.item()
+                    total_loss['tensile'] += tensile_this_loss.item()
 
-            if 'key' in vocab.control_indices.keys():
-                key_this_loss = key_loss(loss_input_1, loss_input_2)
+                if 'key' in vocab.control_indices.keys():
+                    key_this_loss = key_loss(loss_input_1, loss_input_2)
 
-                key_this_loss = torch.sum(key_this_loss) / ce_weight_all[loss_input_2].sum()
-                loss += key_this_loss
-                total_loss['key'] += key_this_loss.item()
+                    key_this_loss = torch.sum(key_this_loss) / ce_weight_all[loss_input_2].sum()
+                    loss += key_this_loss
+                    total_loss['key'] += key_this_loss.item()
 
-            if 'density' in vocab.control_indices.keys():
-                density_this_loss = density_loss(loss_input_1, loss_input_2)
+                if 'density' in vocab.control_indices.keys():
+                    density_this_loss = density_loss(loss_input_1, loss_input_2)
 
-                density_this_loss = torch.sum(density_this_loss) / ce_weight_all[loss_input_2].sum()
-                loss += density_this_loss
-                total_loss['density'] += density_this_loss.item()
+                    density_this_loss = torch.sum(density_this_loss) / ce_weight_all[loss_input_2].sum()
+                    loss += density_this_loss
+                    total_loss['density'] += density_this_loss.item()
 
-            if 'occupation' in vocab.control_indices.keys():
-                occupation_this_loss = occupation_loss(loss_input_1, loss_input_2)
+                if 'occupation' in vocab.control_indices.keys():
+                    occupation_this_loss = occupation_loss(loss_input_1, loss_input_2)
 
-                occupation_this_loss = torch.sum(occupation_this_loss) / ce_weight_all[loss_input_2].sum()
-                loss += occupation_this_loss
-                total_loss['occupation'] += occupation_this_loss.item()
+                    occupation_this_loss = torch.sum(occupation_this_loss) / ce_weight_all[loss_input_2].sum()
+                    loss += occupation_this_loss
+                    total_loss['occupation'] += occupation_this_loss.item()
 
-            if 'polyphony' in vocab.control_indices.keys():
-                polyphony_this_loss = polyphony_loss(loss_input_1, loss_input_2)
+                if 'polyphony' in vocab.control_indices.keys():
+                    polyphony_this_loss = polyphony_loss(loss_input_1, loss_input_2)
 
-                polyphony_this_loss = torch.sum(polyphony_this_loss) / ce_weight_all[loss_input_2].sum()
-                loss += polyphony_this_loss
-                total_loss['polyphony'] += polyphony_this_loss.item()
+                    polyphony_this_loss = torch.sum(polyphony_this_loss) / ce_weight_all[loss_input_2].sum()
+                    loss += polyphony_this_loss
+                    total_loss['polyphony'] += polyphony_this_loss.item()
 
-            accuracies, generated_output, target_output = accuracy(outputs, tgt_out, vocab)
+                accuracies, generated_output, target_output = accuracy(outputs, tgt_out, vocab)
 
-            for token_type in total_accuracy.keys():
-                total_accuracy[token_type] += accuracies[token_type]
-
+                for token_type in total_accuracy.keys():
+                    total_accuracy[token_type] += accuracies[token_type]
+        except Exception as e:
+            logger.info(f'exception {e}')
+            continue
     for key in total_loss.keys():
         total_loss[key] /= total_steps
 
@@ -1389,7 +1415,7 @@ if __name__ == "__main__":
         file_name += '_is_test'
 
     if vocab_mode == 0:
-        logfile = 'smer_control' + file_name + '.log'
+        logfile = 'smer_control' + file_name + '_small_model.log'
     if vocab_mode == 1:
         logfile = 'remi_control' + file_name + '.log'
     logger = log.logger_init(logfile, 'w')

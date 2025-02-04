@@ -81,6 +81,7 @@ class ScoreTransformer(nn.Module):
 
     def forward(self, src, tgt, src_key_padding_mask, tgt_key_padding_mask, memory_key_padding_mask, tgt_mask):
         # Reverse the shape of the batches from (num_sentences, num_tokens_in_each_sentence)
+
         src = src.permute(1,0)
         tgt = tgt.permute(1,0)
 
@@ -103,6 +104,8 @@ class ScoreTransformer(nn.Module):
         return self.fc(output), attention_weight
 
 
+
+
 # Source: https://pytorch.org/tutorials/beginner/transformer_tutorial.html
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, dropout=0.1, max_len=100):
@@ -118,5 +121,8 @@ class PositionalEncoding(nn.Module):
         self.register_buffer('pe', pe)
 
     def forward(self, x):
+
         x = x + self.pe[:x.size(0), :]
+
         return self.dropout(x)
+
