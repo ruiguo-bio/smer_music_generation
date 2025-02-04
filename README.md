@@ -1,10 +1,21 @@
-The SMER music infilling model can be tested from colab and Ableton live using the max plugin.
+# **SMER Music Infilling Model**  
 
-https://colab.research.google.com/drive/17dKOKgoCpq5lA6JIPNLu7mnFWJpT1R1W#scrollTo=zp7MdhBEgP2N
+The **SMER music infilling model** can be tested using **Google Colab** and **Ableton Live** via the Max plugin.  
 
-Plugin repo:
+## 🚀 Try the Model in Colab  
+[**Launch SMER Infilling on Colab**](https://colab.research.google.com/drive/17dKOKgoCpq5lA6JIPNLu7mnFWJpT1R1W#scrollTo=zp7MdhBEgP2N)  
 
-https://github.com/ruiguo-bio/infilling
+## 🎛 Ableton Live Plugin  
+The plugin repository is available here:  
+🔗 [**Infilling Plugin Repo**](https://github.com/ruiguo-bio/infilling)  
 
-Make sure the plugin can connect to the ngok address with "connected" showing in the interface. If it shows "connecting", it means the issue with connection to the colab model.
+## 📌 Setup & Connection  
+- Ensure the plugin successfully connects to the **ngrok** address.  
+- If the interface displays **“connected”**, the connection is successful.  
+- If it remains **“connecting”**, this indicates a connection issue with the Colab model.  
 
+### 🔧 Troubleshooting  
+- Check the **Colab notebook output** to verify that the model is running.  
+- Ensure the **ngrok tunnel** is active and properly forwarding the connection.  
+
+For further issues, please watch the demo video in the plugin repo and understand how to use that infilling interface.
