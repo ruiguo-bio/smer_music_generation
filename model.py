@@ -26,31 +26,34 @@ class Classify_transformer(nn.Module):
         # self.classify_0 = nn.Linear(d_model, 2)
 
     def forward(self, src):
-        # Reverse the shape of the batches from (num_sentences, num_tokens_in_each_sentence)
-        src = src.permute(1, 0)
+        try:
+            # Reverse the shape of the batches from (num_sentences, num_tokens_in_each_sentence)
+            src = src.permute(1, 0)
 
 
-        # Embed the batches, scale by sqrt(d_model), and add the positional encoding
-        src = self.pos_enc(self.embedding(src) * math.sqrt(self.d_model))
+            # Embed the batches, scale by sqrt(d_model), and add the positional encoding
+            src = self.pos_enc(self.embedding(src) * math.sqrt(self.d_model))
 
-        # Send the batches to the model
-        output = self.transformer(src)
+            # Send the batches to the model
+            output = self.transformer(src)
 
-        # Rearrange to batch-first
-        # output = output.permute(1,0,2)
-        output = rearrange(output, 't n e -> n t e')
-        # print("in model, output size", output.size())
-        output = output.mean(dim=1)
-        # print("in model, output size", output.size())
-        output = self.classify_0(output)
-        output1 = self.classify_1(output)
-        output2 = self.classify_2(output)
-        # print("in model, output size", output.size())
+            # Rearrange to batch-first
+            # output = output.permute(1,0,2)
+            output = rearrange(output, 't n e -> n t e')
+            # print("in model, output size", output.size())
+            output = output.mean(dim=1)
+            # print("in model, output size", output.size())
+            output = self.classify_0(output)
+            output1 = self.classify_1(output)
+            output2 = self.classify_2(output)
+            # print("in model, output size", output.size())
 
-        # print("in model, attention weight size", attention_weight.size())
+            # print("in model, attention weight size", attention_weight.size())
 
-        # Run the output through an fc layer to return values for each token in the vocab
-        return output1,output2
+            # Run the output through an fc layer to return values for each token in the vocab
+            return output1,output2
+        except Exception as e:
+           raise e
 
 
 class ScoreTransformer(nn.Module):
@@ -81,7 +84,6 @@ class ScoreTransformer(nn.Module):
 
     def forward(self, src, tgt, src_key_padding_mask, tgt_key_padding_mask, memory_key_padding_mask, tgt_mask):
         # Reverse the shape of the batches from (num_sentences, num_tokens_in_each_sentence)
-
         src = src.permute(1,0)
         tgt = tgt.permute(1,0)
 
@@ -104,8 +106,6 @@ class ScoreTransformer(nn.Module):
         return self.fc(output), attention_weight
 
 
-
-
 # Source: https://pytorch.org/tutorials/beginner/transformer_tutorial.html
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, dropout=0.1, max_len=100):
@@ -121,8 +121,5 @@ class PositionalEncoding(nn.Module):
         self.register_buffer('pe', pe)
 
     def forward(self, x):
-
         x = x + self.pe[:x.size(0), :]
-
         return self.dropout(x)
-
