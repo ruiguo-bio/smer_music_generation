@@ -3,7 +3,6 @@ pretty_midi
 einops
 coloredlogs
 pyyaml
-torch
 pyngrok
 flask-ngrok
 flask-bootstrap
