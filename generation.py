@@ -466,232 +466,234 @@ def restore_marked_input(src_token, generated_output):
 
 
 def generation_all(model, events, device, vocab, logger, all_controls, tracks_to_generate, bars_to_generate):
-    if int(events[0][2]) == 8:
-        duration_name_to_time, duration_time_to_name, duration_times, bar_duration = encode.get_note_duration_dict(
-            1.5, (int(events[0][0]), int(events[0][2])))
-    else:
-        duration_name_to_time, duration_time_to_name, duration_times, bar_duration = encode.get_note_duration_dict(
-            1, (int(events[0][0]), int(events[0][2])))
+    try:
+        if int(events[0][2]) == 8:
+            duration_name_to_time, duration_time_to_name, duration_times, bar_duration = encode.get_note_duration_dict(
+                1.5, (int(events[0][0]), int(events[0][2])))
+        else:
+            duration_name_to_time, duration_time_to_name, duration_times, bar_duration = encode.get_note_duration_dict(
+                1, (int(events[0][0]), int(events[0][2])))
 
-    bar_poses = np.where(np.array(events) == 'bar')[0]
+        bar_poses = np.where(np.array(events) == 'bar')[0]
 
-    bar_nums = len(bar_poses)
+        bar_nums = len(bar_poses)
 
-    r = re.compile('track_\d')
-    track_names = list(set(filter(r.match, events)))
-    track_names.sort()
+        r = re.compile('track_\d')
+        track_names = list(set(filter(r.match, events)))
+        track_names.sort()
 
-    mask_target = []
-    tracks_to_generate = [track_names.index(f'track_{track}') for track in tracks_to_generate]
+        mask_target = []
+        tracks_to_generate = [track_names.index(f'track_{track}') for track in tracks_to_generate]
 
-    for _ in bars_to_generate:
-        for track in tracks_to_generate:
-            mask_target.extend(['r', 'd', 'o', 'p'])
-            if track == len(track_names) - 1:
-                mask_target.append('t')
+        for _ in bars_to_generate:
+            for track in tracks_to_generate:
+                mask_target.extend(['r', 'd', 'o', 'p'])
+                if track == len(track_names) - 1:
+                    mask_target.append('t')
 
-    if bars_to_generate[-1] >= bar_nums:
-        events = fill_empty_bars(events, bars_to_generate[-1] - bar_nums + 1, bar_duration, duration_time_to_name,
-                                 duration_times)
-
-
-    result = mask_bar_and_track(events, vocab, tracks_to_generate, bars_to_generate)
-    if result is None:
-        return result
-    src, mask_track_names, mask_bar_names = result
-
-    if int(events[0][0]) >= 4 and int(events[0][2]) == 4:
-        no_whole_duration = False
-    else:
-        no_whole_duration = True
-
-    if int(events[0][2]) == 8:
-        duration_name_to_time, duration_time_to_name, duration_times, bar_duration = encode.get_note_duration_dict(
-            1.5, (int(events[0][0]), int(events[0][2])))
-    else:
-        duration_name_to_time, duration_time_to_name, duration_times, bar_duration = encode.get_note_duration_dict(
-            1, (int(events[0][0]), int(events[0][2])))
-
-    src_masked_nums = np.sum(src == vocab.char2index('m_0'))
-    tgt_inp = []
-    total_generated_events = []
-
-    if src_masked_nums == 0:
-        return None
-
-    with torch.no_grad():
+        if bars_to_generate[-1] >= bar_nums:
+            events = fill_empty_bars(events, bars_to_generate[-1] - bar_nums + 1, bar_duration, duration_time_to_name,
+                                     duration_times)
 
 
-        this_track_tokens = []
+        result = mask_bar_and_track(events, vocab, tracks_to_generate, bars_to_generate)
+        if result is None:
+            return result
+        src, mask_track_names, mask_bar_names = result
 
-        for mask_idx in tqdm(range(src_masked_nums),desc='infilling blocks'):
-        # while mask_idx < src_masked_nums:
+        if int(events[0][0]) >= 4 and int(events[0][2]) == 4:
+            no_whole_duration = False
+        else:
+            no_whole_duration = True
 
-            # print(f'generating {mask_idx + 1}/{src_masked_nums}')
-            this_tgt_inp = []
-            this_tgt_inp.append(vocab.char2index('m_0'))
-            this_generated_events = []
-            this_generated_events.append('m_0')
-            total_grammar_correct_times = 0
+        if int(events[0][2]) == 8:
+            duration_name_to_time, duration_time_to_name, duration_times, bar_duration = encode.get_note_duration_dict(
+                1.5, (int(events[0][0]), int(events[0][2])))
+        else:
+            duration_name_to_time, duration_time_to_name, duration_times, bar_duration = encode.get_note_duration_dict(
+                1, (int(events[0][0]), int(events[0][2])))
 
-            in_pitch = False
-            in_rest = False
-            in_sep = False
-            in_continue = False
-            while this_tgt_inp[-1] != vocab.char2index('<eos>') and len(this_tgt_inp) < 100:
+        src_masked_nums = np.sum(src == vocab.char2index('m_0'))
+        tgt_inp = []
+        total_generated_events = []
 
-                output, weight = model_generate(model, torch.tensor(src), tgt_inp + this_tgt_inp, device,
-                                                return_weights=True)
+        if src_masked_nums == 0:
+            return None
 
-                if in_sep:
+        with torch.no_grad():
 
-                    sampling_times = 0
 
-                    index = sampling(output[-1], vocab, no_rest=True, no_sep=True, no_eos=True,
-                                     no_whole_duration=True, no_control=True)
-                    while index in vocab.rest_indices or index == vocab.eos_index or index == \
-                            vocab.duration_only_indices[0]:
+            this_track_tokens = []
+
+            for mask_idx in tqdm(range(src_masked_nums),desc='infilling blocks'):
+            # while mask_idx < src_masked_nums:
+
+                # print(f'generating {mask_idx + 1}/{src_masked_nums}')
+                this_tgt_inp = []
+                this_tgt_inp.append(vocab.char2index('m_0'))
+                this_generated_events = []
+                this_generated_events.append('m_0')
+                total_grammar_correct_times = 0
+
+                in_pitch = False
+                in_rest = False
+                in_sep = False
+                in_continue = False
+                while this_tgt_inp[-1] != vocab.char2index('<eos>') and len(this_tgt_inp) < 100:
+
+                    output, weight = model_generate(model, torch.tensor(src), tgt_inp + this_tgt_inp, device,
+                                                    return_weights=True)
+
+                    if in_sep:
+
+                        sampling_times = 0
+
                         index = sampling(output[-1], vocab, no_rest=True, no_sep=True, no_eos=True,
                                          no_whole_duration=True, no_control=True)
-
-                        sampling_times += 1
-                        total_grammar_correct_times += 1
-                        if sampling_times > 10:
-                            logger.info("in sep failed")
-                            break
-
-                    event = vocab.index2char(index)
-
-                elif in_continue:
-                    sampling_times = 0
-
-                    index = sampling(output[-1], vocab, no_rest=True, no_sep=True, no_duration=True,
-                                     no_continue=True, no_eos=True, no_control=True)
-                    while index not in vocab.pitch_indices:
-                        index = sampling(output[-1], vocab, no_rest=True, no_sep=True, no_duration=True,
-                                         no_continue=True,
-                                         no_eos=True, no_control=True)
-                        sampling_times += 1
-                        total_grammar_correct_times += 1
-                        if sampling_times > 10:
-                            logger.info('in continue failed')
-                            break
-
-                    event = vocab.index2char(index)
-
-                elif in_pitch:
-                    sampling_times = 0
-
-                    index = sampling(output[-1], vocab, no_rest=True, no_sep=True, no_continue=True,
-                                     no_whole_duration=no_whole_duration, no_eos=True, no_control=True)
-                    while index not in vocab.duration_only_indices and index not in vocab.pitch_indices:
-                        index = sampling(output[-1], vocab, no_rest=True, no_sep=True, no_continue=True,
-                                         no_whole_duration=no_whole_duration, no_eos=True, no_control=True)
-                        sampling_times += 1
-                        total_grammar_correct_times += 1
-                        if sampling_times > 10:
-                            logger.info('in pitch failed')
-                            break
-                    event = vocab.index2char(index)
-
-                elif in_rest:
-                    sampling_times = 0
-
-                    index = sampling(output[-1], vocab, no_pitch=True, no_rest=True, no_sep=True, no_continue=True,
-                                     no_whole_duration=no_whole_duration, no_eos=True, no_control=True)
-                    while index not in vocab.duration_only_indices:
-                        index = sampling(output[-1], vocab, no_pitch=True, no_rest=True, no_sep=True,
-                                         no_continue=True,
-                                         no_whole_duration=no_whole_duration, no_eos=True, no_control=True)
-                        sampling_times += 1
-                        total_grammar_correct_times += 1
-                        if sampling_times > 10:
-                            logger.info('in rest failed')
-                            break
-                    event = vocab.index2char(index)
-
-
-                elif len(this_tgt_inp) == 1:
-                    if mask_target[mask_idx] != 'r':
-
-                        this_target_control = mask_target[mask_idx]
-                        # print(this_target_control)
-                        if this_target_control == 'd':
-
-                            index = sampling(output[-1], vocab, is_density=True)
-                        elif this_target_control == 'o':
-                            index = sampling(output[-1], vocab, is_occupation=True)
-
-                        elif this_target_control == 'p':
-                            index = sampling(output[-1], vocab, is_polyphony=True)
-
-                        else:
-
-                            index = sampling(output[-1], vocab, is_tensile=True)
-
-
-                    else:
-                        index = sampling(output[-1], vocab, no_duration=True, no_control=True)
-                        sampling_times = 0
-                        while index in vocab.duration_only_indices:
-                            index = sampling(output[-1], vocab, no_duration=True, no_control=True)
+                        while index in vocab.rest_indices or index == vocab.eos_index or index == \
+                                vocab.duration_only_indices[0]:
+                            index = sampling(output[-1], vocab, no_rest=True, no_sep=True, no_eos=True,
+                                             no_whole_duration=True, no_control=True)
 
                             sampling_times += 1
                             total_grammar_correct_times += 1
                             if sampling_times > 10:
-                                logger.info('start failed')
+                                logger.info("in sep failed")
                                 break
 
-                    event = vocab.index2char(index)
+                        event = vocab.index2char(index)
 
-                else:
-                    # free state
-                    index = sampling(output[-1], vocab, no_whole_duration=no_whole_duration, no_control=True)
+                    elif in_continue:
+                        sampling_times = 0
 
-                    event = vocab.index2char(index)
+                        index = sampling(output[-1], vocab, no_rest=True, no_sep=True, no_duration=True,
+                                         no_continue=True, no_eos=True, no_control=True)
+                        while index not in vocab.pitch_indices:
+                            index = sampling(output[-1], vocab, no_rest=True, no_sep=True, no_duration=True,
+                                             no_continue=True,
+                                             no_eos=True, no_control=True)
+                            sampling_times += 1
+                            total_grammar_correct_times += 1
+                            if sampling_times > 10:
+                                logger.info('in continue failed')
+                                break
 
-                if index == vocab.continue_index:
-                    in_continue = True
-                    in_sep = False
+                        event = vocab.index2char(index)
 
-                if index in vocab.pitch_indices:
-                    in_pitch = True
-                    in_sep = False
-                    in_continue = False
+                    elif in_pitch:
+                        sampling_times = 0
 
-                if index in vocab.duration_only_indices:
-                    in_rest = False
-                    in_pitch = False
+                        index = sampling(output[-1], vocab, no_rest=True, no_sep=True, no_continue=True,
+                                         no_whole_duration=no_whole_duration, no_eos=True, no_control=True)
+                        while index not in vocab.duration_only_indices and index not in vocab.pitch_indices:
+                            index = sampling(output[-1], vocab, no_rest=True, no_sep=True, no_continue=True,
+                                             no_whole_duration=no_whole_duration, no_eos=True, no_control=True)
+                            sampling_times += 1
+                            total_grammar_correct_times += 1
+                            if sampling_times > 10:
+                                logger.info('in pitch failed')
+                                break
+                        event = vocab.index2char(index)
 
-                if event == 'sep':
-                    in_sep = True
+                    elif in_rest:
+                        sampling_times = 0
 
-                if event == 'rest':
-                    in_rest = True
+                        index = sampling(output[-1], vocab, no_pitch=True, no_rest=True, no_sep=True, no_continue=True,
+                                         no_whole_duration=no_whole_duration, no_eos=True, no_control=True)
+                        while index not in vocab.duration_only_indices:
+                            index = sampling(output[-1], vocab, no_pitch=True, no_rest=True, no_sep=True,
+                                             no_continue=True,
+                                             no_whole_duration=no_whole_duration, no_eos=True, no_control=True)
+                            sampling_times += 1
+                            total_grammar_correct_times += 1
+                            if sampling_times > 10:
+                                logger.info('in rest failed')
+                                break
+                        event = vocab.index2char(index)
 
-                if index in all_controls:
 
-                    this_tgt_inp.append(index)
-                    this_generated_events.append(event)
-                    this_tgt_inp.append(vocab.char2index('<eos>'))
-                    this_generated_events.append('<eos>')
-                else:
-                    this_track_tokens.append(vocab.index2char(index))
+                    elif len(this_tgt_inp) == 1:
+                        if mask_target[mask_idx] != 'r':
 
-                    this_tgt_inp.append(index)
-                    this_generated_events.append(event)
+                            this_target_control = mask_target[mask_idx]
+                            # print(this_target_control)
+                            if this_target_control == 'd':
 
-            # mask_idx += 1
-            tgt_inp.extend(this_tgt_inp[:-1])
-            total_generated_events.extend(this_generated_events[:-1])
+                                index = sampling(output[-1], vocab, is_density=True)
+                            elif this_target_control == 'o':
+                                index = sampling(output[-1], vocab, is_occupation=True)
 
-    src_token = []
+                            elif this_target_control == 'p':
+                                index = sampling(output[-1], vocab, is_polyphony=True)
 
-    for i, token_idx in enumerate(src):
-        src_token.append(vocab.index2char(token_idx.item()))
+                            else:
 
-    return restore_marked_input(src_token, total_generated_events), mask_track_names, mask_bar_names
+                                index = sampling(output[-1], vocab, is_tensile=True)
 
+
+                        else:
+                            index = sampling(output[-1], vocab, no_duration=True, no_control=True)
+                            sampling_times = 0
+                            while index in vocab.duration_only_indices:
+                                index = sampling(output[-1], vocab, no_duration=True, no_control=True)
+
+                                sampling_times += 1
+                                total_grammar_correct_times += 1
+                                if sampling_times > 10:
+                                    logger.info('start failed')
+                                    break
+
+                        event = vocab.index2char(index)
+
+                    else:
+                        # free state
+                        index = sampling(output[-1], vocab, no_whole_duration=no_whole_duration, no_control=True)
+
+                        event = vocab.index2char(index)
+
+                    if index == vocab.continue_index:
+                        in_continue = True
+                        in_sep = False
+
+                    if index in vocab.pitch_indices:
+                        in_pitch = True
+                        in_sep = False
+                        in_continue = False
+
+                    if index in vocab.duration_only_indices:
+                        in_rest = False
+                        in_pitch = False
+
+                    if event == 'sep':
+                        in_sep = True
+
+                    if event == 'rest':
+                        in_rest = True
+
+                    if index in all_controls:
+
+                        this_tgt_inp.append(index)
+                        this_generated_events.append(event)
+                        this_tgt_inp.append(vocab.char2index('<eos>'))
+                        this_generated_events.append('<eos>')
+                    else:
+                        this_track_tokens.append(vocab.index2char(index))
+
+                        this_tgt_inp.append(index)
+                        this_generated_events.append(event)
+
+                # mask_idx += 1
+                tgt_inp.extend(this_tgt_inp[:-1])
+                total_generated_events.extend(this_generated_events[:-1])
+
+        src_token = []
+
+        for i, token_idx in enumerate(src):
+            src_token.append(vocab.index2char(token_idx.item()))
+
+        return restore_marked_input(src_token, total_generated_events), mask_track_names, mask_bar_names
+    except Exception as e:
+        print(e)
 
 def change_controls(original_event, controls):
     r = re.compile('i_\d')
